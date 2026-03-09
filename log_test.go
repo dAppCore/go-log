@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"strings"
 	"testing"
-
 )
 
 func TestLogger_Levels(t *testing.T) {
@@ -67,8 +66,8 @@ func TestLogger_KeyValues(t *testing.T) {
 	if !strings.Contains(output, "test message") {
 		t.Error("expected message in output")
 	}
-	if !strings.Contains(output, "key1=value1") {
-		t.Error("expected key1=value1 in output")
+	if !strings.Contains(output, "key1=\"value1\"") {
+		t.Errorf("expected key1=\"value1\" in output, got %q", output)
 	}
 	if !strings.Contains(output, "key2=42") {
 		t.Error("expected key2=42 in output")
@@ -85,11 +84,50 @@ func TestLogger_ErrorContext(t *testing.T) {
 	l.Error("something failed", "err", err)
 
 	got := buf.String()
-	if !strings.Contains(got, "op=outer.Op") {
-		t.Errorf("expected output to contain op=outer.Op, got %q", got)
+	if !strings.Contains(got, "op=\"outer.Op\"") {
+		t.Errorf("expected output to contain op=\"outer.Op\", got %q", got)
 	}
-	if !strings.Contains(got, "stack=outer.Op -> test.Op") {
-		t.Errorf("expected output to contain stack=outer.Op -> test.Op, got %q", got)
+	if !strings.Contains(got, "stack=\"outer.Op -> test.Op\"") {
+		t.Errorf("expected output to contain stack=\"outer.Op -> test.Op\", got %q", got)
+	}
+}
+
+func TestLogger_Redaction(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{
+		Level:      LevelInfo,
+		Output:     &buf,
+		RedactKeys: []string{"password", "token"},
+	})
+
+	l.Info("login", "user", "admin", "password", "secret123", "token", "abc-123")
+
+	output := buf.String()
+	if !strings.Contains(output, "user=\"admin\"") {
+		t.Error("expected user=\"admin\"")
+	}
+	if !strings.Contains(output, "password=\"[REDACTED]\"") {
+		t.Errorf("expected password=\"[REDACTED]\", got %q", output)
+	}
+	if !strings.Contains(output, "token=\"[REDACTED]\"") {
+		t.Errorf("expected token=\"[REDACTED]\", got %q", output)
+	}
+}
+
+func TestLogger_InjectionPrevention(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	l.Info("message", "key", "value\n[SEC] injected message")
+
+	output := buf.String()
+	if !strings.Contains(output, "key=\"value\\n[SEC] injected message\"") {
+		t.Errorf("expected escaped newline, got %q", output)
+	}
+	// Ensure it's still a single line (excluding trailing newline)
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line, got %d", len(lines))
 	}
 }
 
@@ -141,7 +179,7 @@ func TestLogger_Security(t *testing.T) {
 	if !strings.Contains(output, "unauthorized access") {
 		t.Error("expected message in security log")
 	}
-	if !strings.Contains(output, "user=admin") {
+	if !strings.Contains(output, "user=\"admin\"") {
 		t.Error("expected context in security log")
 	}
 }
@@ -162,4 +200,3 @@ func TestDefault(t *testing.T) {
 		t.Error("expected package-level Info to produce output")
 	}
 }
-

@@ -241,7 +241,7 @@ func TestLogError_Good(t *testing.T) {
 	output := buf.String()
 	assert.Contains(t, output, "[ERR]")
 	assert.Contains(t, output, "database unavailable")
-	assert.Contains(t, output, "op=db.Connect")
+	assert.Contains(t, output, "op=\"db.Connect\"")
 }
 
 func TestLogError_Good_NilError(t *testing.T) {

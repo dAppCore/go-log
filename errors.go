@@ -8,6 +8,8 @@ package log
 import (
 	"errors"
 	"fmt"
+	"iter"
+	"strings"
 )
 
 // Err represents a structured error with operational context.
@@ -174,35 +176,43 @@ func Root(err error) error {
 	}
 }
 
+// AllOps returns an iterator over all operational contexts in the error chain.
+// It traverses the error tree using errors.Unwrap.
+func AllOps(err error) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for err != nil {
+			if e, ok := err.(*Err); ok {
+				if e.Op != "" {
+					if !yield(e.Op) {
+						return
+					}
+				}
+			}
+			err = errors.Unwrap(err)
+		}
+	}
+}
+
 // StackTrace returns the logical stack trace (chain of operations) from an error.
 // It returns an empty slice if no operational context is found.
 func StackTrace(err error) []string {
 	var stack []string
-	for err != nil {
-		if e, ok := err.(*Err); ok {
-			if e.Op != "" {
-				stack = append(stack, e.Op)
-			}
-		}
-		err = errors.Unwrap(err)
+	for op := range AllOps(err) {
+		stack = append(stack, op)
 	}
 	return stack
 }
 
 // FormatStackTrace returns a pretty-printed logical stack trace.
 func FormatStackTrace(err error) string {
-	stack := StackTrace(err)
-	if len(stack) == 0 {
+	var ops []string
+	for op := range AllOps(err) {
+		ops = append(ops, op)
+	}
+	if len(ops) == 0 {
 		return ""
 	}
-	var res string
-	for i, op := range stack {
-		if i > 0 {
-			res += " -> "
-		}
-		res += op
-	}
-	return res
+	return strings.Join(ops, " -> ")
 }
 
 // --- Combined Log-and-Return Helpers ---

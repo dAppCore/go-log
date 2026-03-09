@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"os/user"
+	"slices"
 	"sync"
 	"time"
 )
@@ -55,6 +56,9 @@ type Logger struct {
 	level  Level
 	output io.Writer
 
+	// RedactKeys is a list of keys whose values should be masked in logs.
+	redactKeys []string
+
 	// Style functions for formatting (can be overridden)
 	StyleTimestamp func(string) string
 	StyleDebug     func(string) string
@@ -95,6 +99,8 @@ type Options struct {
 	Output io.Writer
 	// Rotation enables log rotation to file. If provided, Filename must be set.
 	Rotation *RotationOptions
+	// RedactKeys is a list of keys whose values should be masked in logs.
+	RedactKeys []string
 }
 
 // RotationWriterFactory creates a rotating writer from options.
@@ -114,6 +120,7 @@ func New(opts Options) *Logger {
 	return &Logger{
 		level:          opts.Level,
 		output:         output,
+		redactKeys:     slices.Clone(opts.RedactKeys),
 		StyleTimestamp: identity,
 		StyleDebug:     identity,
 		StyleInfo:      identity,
@@ -146,6 +153,13 @@ func (l *Logger) SetOutput(w io.Writer) {
 	l.mu.Unlock()
 }
 
+// SetRedactKeys sets the keys to be redacted.
+func (l *Logger) SetRedactKeys(keys ...string) {
+	l.mu.Lock()
+	l.redactKeys = slices.Clone(keys)
+	l.mu.Unlock()
+}
+
 func (l *Logger) shouldLog(level Level) bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -156,6 +170,7 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 	l.mu.RLock()
 	output := l.output
 	styleTimestamp := l.StyleTimestamp
+	redactKeys := l.redactKeys
 	l.mu.RUnlock()
 
 	timestamp := styleTimestamp(time.Now().Format("15:04:05"))
@@ -169,7 +184,7 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 					// Check if op is already in keyvals
 					hasOp := false
 					for j := 0; j < len(keyvals); j += 2 {
-						if keyvals[j] == "op" {
+						if k, ok := keyvals[j].(string); ok && k == "op" {
 							hasOp = true
 							break
 						}
@@ -182,7 +197,7 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 					// Check if stack is already in keyvals
 					hasStack := false
 					for j := 0; j < len(keyvals); j += 2 {
-						if keyvals[j] == "stack" {
+						if k, ok := keyvals[j].(string); ok && k == "stack" {
 							hasStack = true
 							break
 						}
@@ -208,7 +223,19 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 			if i+1 < len(keyvals) {
 				val = keyvals[i+1]
 			}
-			kvStr += fmt.Sprintf("%v=%v", key, val)
+
+			// Redaction logic
+			keyStr := fmt.Sprintf("%v", key)
+			if slices.Contains(redactKeys, keyStr) {
+				val = "[REDACTED]"
+			}
+
+			// Secure formatting to prevent log injection
+			if s, ok := val.(string); ok {
+				kvStr += fmt.Sprintf("%v=%q", key, s)
+			} else {
+				kvStr += fmt.Sprintf("%v=%v", key, val)
+			}
 		}
 	}
 
@@ -282,6 +309,11 @@ func SetDefault(l *Logger) {
 // SetLevel sets the default logger's level.
 func SetLevel(level Level) {
 	defaultLogger.SetLevel(level)
+}
+
+// SetRedactKeys sets the default logger's redaction keys.
+func SetRedactKeys(keys ...string) {
+	defaultLogger.SetRedactKeys(keys...)
 }
 
 // Debug logs to the default logger.
