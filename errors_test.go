@@ -336,11 +336,8 @@ func TestStackTrace_NoOp(t *testing.T) {
 	assert.Empty(t, FormatStackTrace(err))
 }
 
-func TestStackTrace_Mixed(t *testing.T) {
+func TestStackTrace_Mixed_Good(t *testing.T) {
 	err := E("inner", "msg", nil)
-	err = errors.New("middle: " + err.Error()) // Breaks the chain if not handled properly, but Unwrap should work if it's a wrapped error
-	// Wait, errors.New doesn't wrap. fmt.Errorf("%w") does.
-	err = E("inner", "msg", nil)
 	err = fmt.Errorf("wrapper: %w", err)
 	err = Wrap(err, "outer", "msg")
 

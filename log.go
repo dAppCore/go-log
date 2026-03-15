@@ -7,7 +7,7 @@ package log
 
 import (
 	"fmt"
-	"io"
+	goio "io"
 	"os"
 	"os/user"
 	"slices"
@@ -54,7 +54,7 @@ func (l Level) String() string {
 type Logger struct {
 	mu     sync.RWMutex
 	level  Level
-	output io.Writer
+	output goio.Writer
 
 	// RedactKeys is a list of keys whose values should be masked in logs.
 	redactKeys []string
@@ -96,7 +96,7 @@ type Options struct {
 	Level Level
 	// Output is the destination for log messages. If Rotation is provided,
 	// Output is ignored and logs are written to the rotating file instead.
-	Output io.Writer
+	Output goio.Writer
 	// Rotation enables log rotation to file. If provided, Filename must be set.
 	Rotation *RotationOptions
 	// RedactKeys is a list of keys whose values should be masked in logs.
@@ -105,7 +105,7 @@ type Options struct {
 
 // RotationWriterFactory creates a rotating writer from options.
 // Set this to enable log rotation (provided by core/go-io integration).
-var RotationWriterFactory func(RotationOptions) io.WriteCloser
+var RotationWriterFactory func(RotationOptions) goio.WriteCloser
 
 // New creates a new Logger with the given options.
 func New(opts Options) *Logger {
@@ -147,7 +147,7 @@ func (l *Logger) Level() Level {
 }
 
 // SetOutput changes the output writer.
-func (l *Logger) SetOutput(w io.Writer) {
+func (l *Logger) SetOutput(w goio.Writer) {
 	l.mu.Lock()
 	l.output = w
 	l.mu.Unlock()
