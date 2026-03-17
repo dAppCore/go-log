@@ -188,6 +188,15 @@ func TestErrCode_Good_NoCode(t *testing.T) {
 	assert.Equal(t, "", ErrCode(err))
 }
 
+func TestErrCode_Good_PlainError(t *testing.T) {
+	err := errors.New("plain error")
+	assert.Equal(t, "", ErrCode(err))
+}
+
+func TestErrCode_Good_Nil(t *testing.T) {
+	assert.Equal(t, "", ErrCode(nil))
+}
+
 func TestMessage_Good(t *testing.T) {
 	err := E("op", "the message", errors.New("base"))
 	assert.Equal(t, "the message", Message(err))

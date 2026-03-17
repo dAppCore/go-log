@@ -29,8 +29,8 @@ The `core` CLI is optional; plain `go test` and `gofmt` work without it.
 
 Single-package library (`package log`) split into two files that wire together:
 
-- **log.go** — `Logger` type, `Level` enum (Quiet→Error→Warn→Info→Debug), key-value formatting with redaction and injection prevention, `Style*` function hooks for decoration, `RotationWriterFactory` injection point, default logger with package-level proxy functions
-- **errors.go** — `Err` structured error type (Op/Msg/Err/Code), creation helpers (`E`, `Wrap`, `WrapCode`, `NewCode`), introspection (`Op`, `ErrCode`, `Root`, `StackTrace`), combined log-and-return helpers (`LogError`, `LogWarn`, `Must`), stdlib wrappers (`Is`, `As`, `Join`)
+- **log.go** — `Logger` type, `Level` enum (Quiet→Error→Warn→Info→Debug), `Security` log method (uses Error level with `[SEC]` prefix), key-value formatting with redaction and injection prevention, `Style*` function hooks for decoration, `RotationWriterFactory` injection point, `Username()` utility, default logger with package-level proxy functions
+- **errors.go** — `Err` structured error type (Op/Msg/Err/Code), creation helpers (`E`, `Wrap`, `WrapCode`, `NewCode`, `NewError`), introspection (`Op`, `ErrCode`, `Message`, `Root`, `AllOps`, `StackTrace`, `FormatStackTrace`), combined log-and-return helpers (`LogError`, `LogWarn`, `Must`), stdlib wrappers (`Is`, `As`, `Join`)
 
 The logger automatically extracts `op` and `stack` from `*Err` values found in key-value pairs. `Wrap` propagates error codes upward through the chain.
 

@@ -2,9 +2,15 @@ package log
 
 import (
 	"bytes"
+	goio "io"
 	"strings"
 	"testing"
 )
+
+// nopWriteCloser wraps a writer with a no-op Close for testing rotation.
+type nopWriteCloser struct{ goio.Writer }
+
+func (nopWriteCloser) Close() error { return nil }
 
 func TestLogger_Levels(t *testing.T) {
 	tests := []struct {
@@ -184,19 +190,150 @@ func TestLogger_Security(t *testing.T) {
 	}
 }
 
-func TestDefault(t *testing.T) {
-	// Default logger should exist
+func TestLogger_SetOutput_Good(t *testing.T) {
+	var buf1, buf2 bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf1})
+
+	l.Info("first")
+	if buf1.Len() == 0 {
+		t.Error("expected output in first buffer")
+	}
+
+	l.SetOutput(&buf2)
+	l.Info("second")
+	if buf2.Len() == 0 {
+		t.Error("expected output in second buffer after SetOutput")
+	}
+}
+
+func TestLogger_SetRedactKeys_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	// No redaction initially
+	l.Info("msg", "secret", "visible")
+	if !strings.Contains(buf.String(), "secret=\"visible\"") {
+		t.Errorf("expected visible value, got %q", buf.String())
+	}
+
+	buf.Reset()
+	l.SetRedactKeys("secret")
+	l.Info("msg", "secret", "hidden")
+	if !strings.Contains(buf.String(), "secret=\"[REDACTED]\"") {
+		t.Errorf("expected redacted value, got %q", buf.String())
+	}
+}
+
+func TestLogger_OddKeyvals_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	// Odd number of keyvals — last key should have no value
+	l.Info("msg", "lonely_key")
+	output := buf.String()
+	if !strings.Contains(output, "lonely_key=<nil>") {
+		t.Errorf("expected lonely_key=<nil>, got %q", output)
+	}
+}
+
+func TestLogger_ExistingOpNotDuplicated_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	err := E("inner.Op", "failed", NewError("cause"))
+	// Pass op explicitly — should not duplicate
+	l.Error("failed", "op", "explicit.Op", "err", err)
+
+	output := buf.String()
+	if strings.Count(output, "op=") != 1 {
+		t.Errorf("expected exactly one op= in output, got %q", output)
+	}
+	if !strings.Contains(output, "op=\"explicit.Op\"") {
+		t.Errorf("expected explicit op, got %q", output)
+	}
+}
+
+func TestLogger_ExistingStackNotDuplicated_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	err := E("inner.Op", "failed", NewError("cause"))
+	// Pass stack explicitly — should not duplicate
+	l.Error("failed", "stack", "custom.Stack", "err", err)
+
+	output := buf.String()
+	if strings.Count(output, "stack=") != 1 {
+		t.Errorf("expected exactly one stack= in output, got %q", output)
+	}
+	if !strings.Contains(output, "stack=\"custom.Stack\"") {
+		t.Errorf("expected custom stack, got %q", output)
+	}
+}
+
+func TestNew_RotationFactory_Good(t *testing.T) {
+	var buf bytes.Buffer
+	// Set up a mock rotation writer factory
+	original := RotationWriterFactory
+	defer func() { RotationWriterFactory = original }()
+
+	RotationWriterFactory = func(opts RotationOptions) goio.WriteCloser {
+		return nopWriteCloser{&buf}
+	}
+
+	l := New(Options{
+		Level:    LevelInfo,
+		Rotation: &RotationOptions{Filename: "test.log"},
+	})
+
+	l.Info("rotated message")
+	if buf.Len() == 0 {
+		t.Error("expected output via rotation writer")
+	}
+}
+
+func TestNew_DefaultOutput_Good(t *testing.T) {
+	// No output or rotation — should default to stderr (not nil)
+	l := New(Options{Level: LevelInfo})
+	if l.output == nil {
+		t.Error("expected non-nil output when no Output specified")
+	}
+}
+
+func TestUsername_Good(t *testing.T) {
+	name := Username()
+	if name == "" {
+		t.Error("expected Username to return a non-empty string")
+	}
+}
+
+func TestDefault_Good(t *testing.T) {
 	if Default() == nil {
 		t.Error("expected default logger to exist")
 	}
 
-	// Package-level functions should work
+	// All package-level proxy functions
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelDebug, Output: &buf})
 	SetDefault(l)
+	defer SetDefault(New(Options{Level: LevelInfo}))
 
-	Info("test")
-	if buf.Len() == 0 {
-		t.Error("expected package-level Info to produce output")
+	SetLevel(LevelDebug)
+	if l.Level() != LevelDebug {
+		t.Error("expected package-level SetLevel to work")
+	}
+
+	SetRedactKeys("secret")
+
+	Debug("debug msg")
+	Info("info msg")
+	Warn("warn msg")
+	Error("error msg")
+	Security("sec msg")
+
+	output := buf.String()
+	for _, tag := range []string{"[DBG]", "[INF]", "[WRN]", "[ERR]", "[SEC]"} {
+		if !strings.Contains(output, tag) {
+			t.Errorf("expected %s in output, got %q", tag, output)
+		}
 	}
 }
