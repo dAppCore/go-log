@@ -1,4 +1,4 @@
-module forge.lthn.ai/core/go-log
+module dappco.re/go/core/log
 
 go 1.26.0
 
