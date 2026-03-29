@@ -128,6 +128,8 @@ func Join(errs ...error) error {
 
 // Op extracts the operation name from an error.
 // Returns empty string if the error is not an *Err.
+//
+//	op := log.Op(err) // e.g. "user.Save"
 func Op(err error) string {
 	var e *Err
 	if As(err, &e) {
@@ -138,6 +140,8 @@ func Op(err error) string {
 
 // ErrCode extracts the error code from an error.
 // Returns empty string if the error is not an *Err or has no code.
+//
+//	code := log.ErrCode(err) // e.g. "VALIDATION_FAILED"
 func ErrCode(err error) string {
 	var e *Err
 	if As(err, &e) {
@@ -161,6 +165,8 @@ func Message(err error) string {
 
 // Root returns the root cause of an error chain.
 // Unwraps until no more wrapped errors are found.
+//
+//	cause := log.Root(err)
 func Root(err error) error {
 	if err == nil {
 		return nil
@@ -176,6 +182,8 @@ func Root(err error) error {
 
 // AllOps returns an iterator over all operational contexts in the error chain.
 // It traverses the error tree using errors.Unwrap.
+//
+//	for op := range log.AllOps(err) { /* "api.Call" → "db.Query" → ... */ }
 func AllOps(err error) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		for err != nil {
@@ -193,6 +201,8 @@ func AllOps(err error) iter.Seq[string] {
 
 // StackTrace returns the logical stack trace (chain of operations) from an error.
 // It returns an empty slice if no operational context is found.
+//
+//	ops := log.StackTrace(err) // ["api.Call", "db.Query", "sql.Exec"]
 func StackTrace(err error) []string {
 	var stack []string
 	for op := range AllOps(err) {
@@ -202,6 +212,8 @@ func StackTrace(err error) []string {
 }
 
 // FormatStackTrace returns a pretty-printed logical stack trace.
+//
+//	trace := log.FormatStackTrace(err) // "api.Call -> db.Query -> sql.Exec"
 func FormatStackTrace(err error) string {
 	var ops []string
 	for op := range AllOps(err) {

@@ -169,6 +169,8 @@ func safeStyle(style func(string) string) func(string) string {
 }
 
 // SetLevel changes the log level.
+//
+//	logger.SetLevel(log.LevelDebug)
 func (l *Logger) SetLevel(level Level) {
 	l.mu.Lock()
 	l.level = normaliseLevel(level)
@@ -176,6 +178,8 @@ func (l *Logger) SetLevel(level Level) {
 }
 
 // Level returns the current log level.
+//
+//	current := logger.Level()
 func (l *Logger) Level() Level {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -183,6 +187,8 @@ func (l *Logger) Level() Level {
 }
 
 // SetOutput changes the output writer.
+//
+//	logger.SetOutput(os.Stdout)
 func (l *Logger) SetOutput(w goio.Writer) {
 	if w == nil {
 		w = os.Stderr
@@ -193,6 +199,8 @@ func (l *Logger) SetOutput(w goio.Writer) {
 }
 
 // SetRedactKeys sets the keys to be redacted.
+//
+//	logger.SetRedactKeys("password", "token", "secret")
 func (l *Logger) SetRedactKeys(keys ...string) {
 	l.mu.Lock()
 	l.redactKeys = slices.Clone(keys)
@@ -282,6 +290,8 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 }
 
 // Debug logs a debug message with optional key-value pairs.
+//
+//	logger.Debug("processing request", "method", "GET", "path", "/api/users")
 func (l *Logger) Debug(msg string, keyvals ...any) {
 	if l.shouldLog(LevelDebug) {
 		l.mu.RLock()
@@ -292,6 +302,8 @@ func (l *Logger) Debug(msg string, keyvals ...any) {
 }
 
 // Info logs an info message with optional key-value pairs.
+//
+//	logger.Info("server started", "port", 8080)
 func (l *Logger) Info(msg string, keyvals ...any) {
 	if l.shouldLog(LevelInfo) {
 		l.mu.RLock()
@@ -302,6 +314,8 @@ func (l *Logger) Info(msg string, keyvals ...any) {
 }
 
 // Warn logs a warning message with optional key-value pairs.
+//
+//	logger.Warn("high memory usage", "percent", 92)
 func (l *Logger) Warn(msg string, keyvals ...any) {
 	if l.shouldLog(LevelWarn) {
 		l.mu.RLock()
@@ -312,6 +326,8 @@ func (l *Logger) Warn(msg string, keyvals ...any) {
 }
 
 // Error logs an error message with optional key-value pairs.
+//
+//	logger.Error("database connection failed", "err", err, "host", "db.local")
 func (l *Logger) Error(msg string, keyvals ...any) {
 	if l.shouldLog(LevelError) {
 		l.mu.RLock()
@@ -324,6 +340,8 @@ func (l *Logger) Error(msg string, keyvals ...any) {
 // Security logs a security event with optional key-value pairs.
 // It uses LevelError to ensure security events are visible even in restrictive
 // log configurations.
+//
+//	logger.Security("brute force detected", "ip", remoteAddr, "attempts", 50)
 func (l *Logger) Security(msg string, keyvals ...any) {
 	if l.shouldLog(LevelError) {
 		l.mu.RLock()
@@ -365,6 +383,8 @@ var defaultLogger = New(Options{Level: LevelInfo})
 var defaultLoggerMu sync.RWMutex
 
 // Default returns the default logger.
+//
+//	logger := log.Default()
 func Default() *Logger {
 	defaultLoggerMu.RLock()
 	defer defaultLoggerMu.RUnlock()
@@ -372,6 +392,8 @@ func Default() *Logger {
 }
 
 // SetDefault sets the default logger.
+//
+//	log.SetDefault(customLogger)
 func SetDefault(l *Logger) {
 	if l == nil {
 		return
