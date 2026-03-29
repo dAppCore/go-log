@@ -137,6 +137,23 @@ func TestLogger_InjectionPrevention(t *testing.T) {
 	}
 }
 
+func TestLogger_MessageSanitization_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	l.Info("message\nwith\tcontrol\rchars")
+	output := buf.String()
+
+	if !strings.Contains(output, "message\\nwith\\tcontrol\\rchars") {
+		t.Errorf("expected control characters to be escaped, got %q", output)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line, got %d", len(lines))
+	}
+}
+
 func TestLogger_SetLevel(t *testing.T) {
 	l := New(Options{Level: LevelInfo})
 
@@ -147,6 +164,11 @@ func TestLogger_SetLevel(t *testing.T) {
 	l.SetLevel(LevelDebug)
 	if l.Level() != LevelDebug {
 		t.Error("expected level to be Debug after SetLevel")
+	}
+
+	l.SetLevel(99)
+	if l.Level() != LevelInfo {
+		t.Errorf("expected invalid level to default back to info, got %v", l.Level())
 	}
 }
 

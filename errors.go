@@ -68,12 +68,7 @@ func Wrap(err error, op, msg string) error {
 	if err == nil {
 		return nil
 	}
-	// Preserve Code from wrapped *Err
-	var logErr *Err
-	if As(err, &logErr) && logErr.Code != "" {
-		return &Err{Op: op, Msg: msg, Err: err, Code: logErr.Code}
-	}
-	return &Err{Op: op, Msg: msg, Err: err}
+	return &Err{Op: op, Msg: msg, Err: err, Code: ErrCode(err)}
 }
 
 // WrapCode wraps an error with operation context and error code.
@@ -84,6 +79,9 @@ func Wrap(err error, op, msg string) error {
 //
 //	return log.WrapCode(err, "VALIDATION_ERROR", "user.Validate", "invalid email")
 func WrapCode(err error, code, op, msg string) error {
+	if code == "" {
+		code = ErrCode(err)
+	}
 	if err == nil && code == "" {
 		return nil
 	}

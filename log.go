@@ -39,6 +39,13 @@ const (
 	defaultRotationMaxBackups = 5
 )
 
+func normaliseLevel(level Level) Level {
+	if level < LevelQuiet || level > LevelDebug {
+		return LevelInfo
+	}
+	return level
+}
+
 // String returns the level name.
 func (l Level) String() string {
 	switch l {
@@ -116,10 +123,7 @@ var RotationWriterFactory func(RotationOptions) goio.WriteCloser
 
 // New creates a new Logger with the given options.
 func New(opts Options) *Logger {
-	level := opts.Level
-	if level < LevelQuiet || level > LevelDebug {
-		level = LevelInfo
-	}
+	level := normaliseLevel(opts.Level)
 
 	output := opts.Output
 	if opts.Rotation != nil && opts.Rotation.Filename != "" && RotationWriterFactory != nil {
@@ -167,7 +171,7 @@ func safeStyle(style func(string) string) func(string) string {
 // SetLevel changes the log level.
 func (l *Logger) SetLevel(level Level) {
 	l.mu.Lock()
-	l.level = level
+	l.level = normaliseLevel(level)
 	l.mu.Unlock()
 }
 
@@ -274,7 +278,7 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 		}
 	}
 
-	_, _ = fmt.Fprintf(output, "%s %s %s%s\n", timestamp, prefix, msg, kvStr)
+	_, _ = fmt.Fprintf(output, "%s %s %s%s\n", timestamp, prefix, normaliseLogText(msg), kvStr)
 }
 
 // Debug logs a debug message with optional key-value pairs.
@@ -339,7 +343,20 @@ func Username() string {
 	if u := os.Getenv("USER"); u != "" {
 		return u
 	}
-	return os.Getenv("USERNAME")
+	if u := os.Getenv("USERNAME"); u != "" {
+		return u
+	}
+	return "unknown"
+}
+
+var logTextCleaner = strings.NewReplacer(
+	"\r", "\\r",
+	"\n", "\\n",
+	"\t", "\\t",
+)
+
+func normaliseLogText(text string) string {
+	return logTextCleaner.Replace(text)
 }
 
 // --- Default logger ---

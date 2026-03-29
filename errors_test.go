@@ -95,6 +95,14 @@ func TestWrap_PreservesCode_Good(t *testing.T) {
 	assert.Contains(t, outer.Error(), "[VALIDATION_ERROR]")
 }
 
+func TestWrap_PreservesCode_FromNestedChain_Good(t *testing.T) {
+	root := WrapCode(errors.New("base"), "CHAIN_ERROR", "inner", "inner failed")
+	wrapped := Wrap(fmt.Errorf("mid layer: %w", root), "outer", "outer context")
+
+	assert.Equal(t, "CHAIN_ERROR", ErrCode(wrapped))
+	assert.Contains(t, wrapped.Error(), "[CHAIN_ERROR]")
+}
+
 func TestWrap_NilError_Good(t *testing.T) {
 	err := Wrap(nil, "op", "msg")
 	assert.Nil(t, err)
