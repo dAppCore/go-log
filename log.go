@@ -258,11 +258,11 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 			if i > 0 {
 				kvStr += " "
 			}
-			key := keyvals[i]
-			var val any
-			if i+1 < len(keyvals) {
-				val = keyvals[i+1]
-			}
+		key := normaliseLogText(fmt.Sprintf("%v", keyvals[i]))
+		var val any
+		if i+1 < len(keyvals) {
+			val = keyvals[i+1]
+		}
 
 			// Redaction logic
 			if shouldRedact(key, redactKeys) {
@@ -271,12 +271,12 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 
 			// Secure formatting to prevent log injection
 			if s, ok := val.(string); ok {
-				kvStr += fmt.Sprintf("%v=%q", key, s)
-			} else {
-				kvStr += fmt.Sprintf("%v=%v", key, val)
-			}
+			kvStr += fmt.Sprintf("%s=%q", key, s)
+		} else {
+			kvStr += fmt.Sprintf("%s=%v", key, normaliseLogText(fmt.Sprintf("%v", val)))
 		}
 	}
+}
 
 	_, _ = fmt.Fprintf(output, "%s %s %s%s\n", timestamp, prefix, normaliseLogText(msg), kvStr)
 }

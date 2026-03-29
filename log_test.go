@@ -137,6 +137,26 @@ func TestLogger_InjectionPrevention(t *testing.T) {
 	}
 }
 
+func TestLogger_KeySanitization_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	l.Info("message", "key\nwith newline", "value\nwith newline")
+	output := buf.String()
+
+	if !strings.Contains(output, "key\\nwith newline") {
+		t.Errorf("expected sanitized key, got %q", output)
+	}
+	if !strings.Contains(output, "value\\nwith newline") {
+		t.Errorf("expected sanitized value, got %q", output)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line, got %d", len(lines))
+	}
+}
+
 func TestLogger_MessageSanitization_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelInfo, Output: &buf})
