@@ -237,7 +237,7 @@ func LogError(err error, op, msg string) error {
 		return nil
 	}
 	wrapped := Wrap(err, op, msg)
-	defaultLogger.Error(msg, "op", op, "err", err)
+	Default().Error(msg, "op", op, "err", wrapped)
 	return wrapped
 }
 
@@ -252,7 +252,7 @@ func LogWarn(err error, op, msg string) error {
 		return nil
 	}
 	wrapped := Wrap(err, op, msg)
-	defaultLogger.Warn(msg, "op", op, "err", err)
+	Default().Warn(msg, "op", op, "err", wrapped)
 	return wrapped
 }
 
@@ -264,7 +264,8 @@ func LogWarn(err error, op, msg string) error {
 //	log.Must(Initialize(), "app", "startup failed")
 func Must(err error, op, msg string) {
 	if err != nil {
-		defaultLogger.Error(msg, "op", op, "err", err)
-		panic(Wrap(err, op, msg))
+		wrapped := Wrap(err, op, msg)
+		Default().Error(msg, "op", op, "err", wrapped)
+		panic(wrapped)
 	}
 }

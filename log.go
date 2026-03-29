@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/user"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,6 +31,12 @@ const (
 	LevelInfo
 	// LevelDebug shows all messages including debug details.
 	LevelDebug
+)
+
+const (
+	defaultRotationMaxSize    = 100
+	defaultRotationMaxAge     = 28
+	defaultRotationMaxBackups = 5
 )
 
 // String returns the level name.
@@ -109,16 +116,21 @@ var RotationWriterFactory func(RotationOptions) goio.WriteCloser
 
 // New creates a new Logger with the given options.
 func New(opts Options) *Logger {
+	level := opts.Level
+	if level < LevelQuiet || level > LevelDebug {
+		level = LevelInfo
+	}
+
 	output := opts.Output
 	if opts.Rotation != nil && opts.Rotation.Filename != "" && RotationWriterFactory != nil {
-		output = RotationWriterFactory(*opts.Rotation)
+		output = RotationWriterFactory(normaliseRotationOptions(*opts.Rotation))
 	}
 	if output == nil {
 		output = os.Stderr
 	}
 
 	return &Logger{
-		level:          opts.Level,
+		level:          level,
 		output:         output,
 		redactKeys:     slices.Clone(opts.RedactKeys),
 		StyleTimestamp: identity,
@@ -130,7 +142,27 @@ func New(opts Options) *Logger {
 	}
 }
 
+func normaliseRotationOptions(opts RotationOptions) RotationOptions {
+	if opts.MaxSize <= 0 {
+		opts.MaxSize = defaultRotationMaxSize
+	}
+	if opts.MaxAge == 0 {
+		opts.MaxAge = defaultRotationMaxAge
+	}
+	if opts.MaxBackups <= 0 {
+		opts.MaxBackups = defaultRotationMaxBackups
+	}
+	return opts
+}
+
 func identity(s string) string { return s }
+
+func safeStyle(style func(string) string) func(string) string {
+	if style == nil {
+		return identity
+	}
+	return style
+}
 
 // SetLevel changes the log level.
 func (l *Logger) SetLevel(level Level) {
@@ -148,6 +180,9 @@ func (l *Logger) Level() Level {
 
 // SetOutput changes the output writer.
 func (l *Logger) SetOutput(w goio.Writer) {
+	if w == nil {
+		w = os.Stderr
+	}
 	l.mu.Lock()
 	l.output = w
 	l.mu.Unlock()
@@ -167,45 +202,46 @@ func (l *Logger) shouldLog(level Level) bool {
 }
 
 func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
+	_ = level
 	l.mu.RLock()
 	output := l.output
 	styleTimestamp := l.StyleTimestamp
 	redactKeys := l.redactKeys
 	l.mu.RUnlock()
 
+	if styleTimestamp == nil {
+		styleTimestamp = identity
+	}
 	timestamp := styleTimestamp(time.Now().Format("15:04:05"))
+
+	existing := make(map[string]struct{}, len(keyvals)/2+2)
+	for i := 0; i < len(keyvals); i += 2 {
+		if key, ok := keyvals[i].(string); ok {
+			existing[key] = struct{}{}
+		}
+	}
 
 	// Automatically extract context from error if present in keyvals
 	origLen := len(keyvals)
 	for i := 0; i < origLen; i += 2 {
-		if i+1 < origLen {
-			if err, ok := keyvals[i+1].(error); ok {
-				if op := Op(err); op != "" {
-					// Check if op is already in keyvals
-					hasOp := false
-					for j := 0; j < len(keyvals); j += 2 {
-						if k, ok := keyvals[j].(string); ok && k == "op" {
-							hasOp = true
-							break
-						}
-					}
-					if !hasOp {
-						keyvals = append(keyvals, "op", op)
-					}
-				}
-				if stack := FormatStackTrace(err); stack != "" {
-					// Check if stack is already in keyvals
-					hasStack := false
-					for j := 0; j < len(keyvals); j += 2 {
-						if k, ok := keyvals[j].(string); ok && k == "stack" {
-							hasStack = true
-							break
-						}
-					}
-					if !hasStack {
-						keyvals = append(keyvals, "stack", stack)
-					}
-				}
+		if i+1 >= origLen {
+			continue
+		}
+		err, ok := keyvals[i+1].(error)
+		if !ok {
+			continue
+		}
+
+		if op := Op(err); op != "" {
+			if _, hasOp := existing["op"]; !hasOp {
+				existing["op"] = struct{}{}
+				keyvals = append(keyvals, "op", op)
+			}
+		}
+		if stack := FormatStackTrace(err); stack != "" {
+			if _, hasStack := existing["stack"]; !hasStack {
+				existing["stack"] = struct{}{}
+				keyvals = append(keyvals, "stack", stack)
 			}
 		}
 	}
@@ -225,8 +261,7 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 			}
 
 			// Redaction logic
-			keyStr := fmt.Sprintf("%v", key)
-			if slices.Contains(redactKeys, keyStr) {
+			if shouldRedact(key, redactKeys) {
 				val = "[REDACTED]"
 			}
 
@@ -245,28 +280,40 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 // Debug logs a debug message with optional key-value pairs.
 func (l *Logger) Debug(msg string, keyvals ...any) {
 	if l.shouldLog(LevelDebug) {
-		l.log(LevelDebug, l.StyleDebug("[DBG]"), msg, keyvals...)
+		l.mu.RLock()
+		style := safeStyle(l.StyleDebug)
+		l.mu.RUnlock()
+		l.log(LevelDebug, style("[DBG]"), msg, keyvals...)
 	}
 }
 
 // Info logs an info message with optional key-value pairs.
 func (l *Logger) Info(msg string, keyvals ...any) {
 	if l.shouldLog(LevelInfo) {
-		l.log(LevelInfo, l.StyleInfo("[INF]"), msg, keyvals...)
+		l.mu.RLock()
+		style := safeStyle(l.StyleInfo)
+		l.mu.RUnlock()
+		l.log(LevelInfo, style("[INF]"), msg, keyvals...)
 	}
 }
 
 // Warn logs a warning message with optional key-value pairs.
 func (l *Logger) Warn(msg string, keyvals ...any) {
 	if l.shouldLog(LevelWarn) {
-		l.log(LevelWarn, l.StyleWarn("[WRN]"), msg, keyvals...)
+		l.mu.RLock()
+		style := safeStyle(l.StyleWarn)
+		l.mu.RUnlock()
+		l.log(LevelWarn, style("[WRN]"), msg, keyvals...)
 	}
 }
 
 // Error logs an error message with optional key-value pairs.
 func (l *Logger) Error(msg string, keyvals ...any) {
 	if l.shouldLog(LevelError) {
-		l.log(LevelError, l.StyleError("[ERR]"), msg, keyvals...)
+		l.mu.RLock()
+		style := safeStyle(l.StyleError)
+		l.mu.RUnlock()
+		l.log(LevelError, style("[ERR]"), msg, keyvals...)
 	}
 }
 
@@ -275,7 +322,10 @@ func (l *Logger) Error(msg string, keyvals ...any) {
 // log configurations.
 func (l *Logger) Security(msg string, keyvals ...any) {
 	if l.shouldLog(LevelError) {
-		l.log(LevelError, l.StyleSecurity("[SEC]"), msg, keyvals...)
+		l.mu.RLock()
+		style := safeStyle(l.StyleSecurity)
+		l.mu.RUnlock()
+		l.log(LevelError, style("[SEC]"), msg, keyvals...)
 	}
 }
 
@@ -295,48 +345,66 @@ func Username() string {
 // --- Default logger ---
 
 var defaultLogger = New(Options{Level: LevelInfo})
+var defaultLoggerMu sync.RWMutex
 
 // Default returns the default logger.
 func Default() *Logger {
+	defaultLoggerMu.RLock()
+	defer defaultLoggerMu.RUnlock()
 	return defaultLogger
 }
 
 // SetDefault sets the default logger.
 func SetDefault(l *Logger) {
+	if l == nil {
+		return
+	}
+	defaultLoggerMu.Lock()
 	defaultLogger = l
+	defaultLoggerMu.Unlock()
 }
 
 // SetLevel sets the default logger's level.
 func SetLevel(level Level) {
-	defaultLogger.SetLevel(level)
+	Default().SetLevel(level)
 }
 
 // SetRedactKeys sets the default logger's redaction keys.
 func SetRedactKeys(keys ...string) {
-	defaultLogger.SetRedactKeys(keys...)
+	Default().SetRedactKeys(keys...)
 }
 
 // Debug logs to the default logger.
 func Debug(msg string, keyvals ...any) {
-	defaultLogger.Debug(msg, keyvals...)
+	Default().Debug(msg, keyvals...)
 }
 
 // Info logs to the default logger.
 func Info(msg string, keyvals ...any) {
-	defaultLogger.Info(msg, keyvals...)
+	Default().Info(msg, keyvals...)
 }
 
 // Warn logs to the default logger.
 func Warn(msg string, keyvals ...any) {
-	defaultLogger.Warn(msg, keyvals...)
+	Default().Warn(msg, keyvals...)
 }
 
 // Error logs to the default logger.
 func Error(msg string, keyvals ...any) {
-	defaultLogger.Error(msg, keyvals...)
+	Default().Error(msg, keyvals...)
 }
 
 // Security logs to the default logger.
 func Security(msg string, keyvals ...any) {
-	defaultLogger.Security(msg, keyvals...)
+	Default().Security(msg, keyvals...)
+}
+
+func shouldRedact(key any, redactKeys []string) bool {
+	keyStr := fmt.Sprintf("%v", key)
+	for _, redactKey := range redactKeys {
+		if strings.EqualFold(redactKey, keyStr) {
+			return true
+		}
+	}
+	return false
 }
