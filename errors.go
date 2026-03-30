@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"iter"
 	"strings"
+	"time"
 )
 
 // Err represents a structured error with operational context.
@@ -19,6 +20,12 @@ type Err struct {
 	Msg  string // Human-readable message
 	Err  error  // Underlying error (optional)
 	Code string // Error code (optional, e.g., "VALIDATION_FAILED")
+	// Retryable indicates whether the caller can safely retry this error.
+	Retryable bool
+	// RetryAfter suggests a delay before retrying when Retryable is true.
+	RetryAfter *time.Duration
+	// NextAction suggests an alternative path when this error is not directly retryable.
+	NextAction string
 }
 
 // Error implements the error interface.
@@ -57,6 +64,20 @@ func E(op, msg string, err error) error {
 	return &Err{Op: op, Msg: msg, Err: err}
 }
 
+// EWithRecovery creates a new Err with operation context and recovery metadata.
+func EWithRecovery(op, msg string, err error, retryable bool, retryAfter *time.Duration, nextAction string) error {
+	recoveryErr := &Err{
+		Op:  op,
+		Msg: msg,
+		Err: err,
+	}
+	inheritRecovery(recoveryErr, err)
+	recoveryErr.Retryable = retryable
+	recoveryErr.RetryAfter = retryAfter
+	recoveryErr.NextAction = nextAction
+	return recoveryErr
+}
+
 // Wrap wraps an error with operation context.
 // Returns nil if err is nil, to support conditional wrapping.
 // Preserves error Code if the wrapped error is an *Err.
@@ -68,7 +89,27 @@ func Wrap(err error, op, msg string) error {
 	if err == nil {
 		return nil
 	}
-	return &Err{Op: op, Msg: msg, Err: err, Code: ErrCode(err)}
+	wrapped := &Err{Op: op, Msg: msg, Err: err, Code: ErrCode(err)}
+	inheritRecovery(wrapped, err)
+	return wrapped
+}
+
+// WrapWithRecovery wraps an error with operation context and explicit recovery metadata.
+func WrapWithRecovery(err error, op, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error {
+	if err == nil {
+		return nil
+	}
+	recoveryErr := &Err{
+		Op:   op,
+		Msg:  msg,
+		Err:  err,
+		Code: ErrCode(err),
+	}
+	inheritRecovery(recoveryErr, err)
+	recoveryErr.Retryable = retryable
+	recoveryErr.RetryAfter = retryAfter
+	recoveryErr.NextAction = nextAction
+	return recoveryErr
 }
 
 // WrapCode wraps an error with operation context and error code.
@@ -85,7 +126,30 @@ func WrapCode(err error, code, op, msg string) error {
 	if err == nil && code == "" {
 		return nil
 	}
-	return &Err{Op: op, Msg: msg, Err: err, Code: code}
+	wrapped := &Err{Op: op, Msg: msg, Err: err, Code: code}
+	inheritRecovery(wrapped, err)
+	return wrapped
+}
+
+// WrapCodeWithRecovery wraps an error with operation context, code, and recovery metadata.
+func WrapCodeWithRecovery(err error, code, op, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error {
+	if code == "" {
+		code = ErrCode(err)
+	}
+	if err == nil && code == "" {
+		return nil
+	}
+	recoveryErr := &Err{
+		Op:   op,
+		Msg:  msg,
+		Err:  err,
+		Code: code,
+	}
+	inheritRecovery(recoveryErr, err)
+	recoveryErr.Retryable = retryable
+	recoveryErr.RetryAfter = retryAfter
+	recoveryErr.NextAction = nextAction
+	return recoveryErr
 }
 
 // NewCode creates an error with just code and message (no underlying error).
@@ -96,6 +160,59 @@ func WrapCode(err error, code, op, msg string) error {
 //	var ErrNotFound = log.NewCode("NOT_FOUND", "resource not found")
 func NewCode(code, msg string) error {
 	return &Err{Msg: msg, Code: code}
+}
+
+// NewCodeWithRecovery creates a coded error with recovery metadata.
+func NewCodeWithRecovery(code, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error {
+	return &Err{
+		Msg:        msg,
+		Code:       code,
+		Retryable:  retryable,
+		RetryAfter: retryAfter,
+		NextAction: nextAction,
+	}
+}
+
+// inheritRecovery copies recovery metadata from the first *Err in err's chain.
+func inheritRecovery(dst *Err, err error) {
+	if err == nil || dst == nil {
+		return
+	}
+	var source *Err
+	if As(err, &source) {
+		dst.Retryable = source.Retryable
+		dst.RetryAfter = source.RetryAfter
+		dst.NextAction = source.NextAction
+	}
+}
+
+// RetryAfter returns the first retry-after hint from an error chain, if present.
+func RetryAfter(err error) (*time.Duration, bool) {
+	var wrapped *Err
+	if As(err, &wrapped) {
+		if wrapped.RetryAfter != nil {
+			return wrapped.RetryAfter, true
+		}
+	}
+	return nil, false
+}
+
+// IsRetryable reports whether the error chain contains a retryable Err.
+func IsRetryable(err error) bool {
+	var wrapped *Err
+	if As(err, &wrapped) {
+		return wrapped.Retryable
+	}
+	return false
+}
+
+// RecoveryAction returns the first next action from an error chain.
+func RecoveryAction(err error) string {
+	var wrapped *Err
+	if As(err, &wrapped) {
+		return wrapped.NextAction
+	}
+	return ""
 }
 
 // --- Standard Library Wrappers ---

@@ -255,6 +255,25 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 		if !ok {
 			continue
 		}
+		var logErr *Err
+		if As(err, &logErr) {
+			if _, hasRetryable := existing["retryable"]; !hasRetryable {
+				existing["retryable"] = struct{}{}
+				keyvals = append(keyvals, "retryable", logErr.Retryable)
+			}
+			if logErr.RetryAfter != nil {
+				if _, hasRetryAfter := existing["retry_after_seconds"]; !hasRetryAfter {
+					existing["retry_after_seconds"] = struct{}{}
+					keyvals = append(keyvals, "retry_after_seconds", logErr.RetryAfter.Seconds())
+				}
+			}
+			if logErr.NextAction != "" {
+				if _, hasNextAction := existing["next_action"]; !hasNextAction {
+					existing["next_action"] = struct{}{}
+					keyvals = append(keyvals, "next_action", logErr.NextAction)
+				}
+			}
+		}
 
 		if op := Op(err); op != "" {
 			if _, hasOp := existing["op"]; !hasOp {

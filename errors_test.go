@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -73,6 +74,20 @@ func TestE_Good_NilError(t *testing.T) {
 	assert.Equal(t, "op.Name: message", err.Error())
 }
 
+func TestEWithRecovery_Good(t *testing.T) {
+	retryAfter := time.Second * 5
+	err := EWithRecovery("op.Name", "message", nil, true, &retryAfter, "retry once")
+
+	var logErr *Err
+	assert.NotNil(t, err)
+	assert.True(t, As(err, &logErr))
+	assert.True(t, logErr.Retryable)
+	if assert.NotNil(t, logErr.RetryAfter) {
+		assert.Equal(t, retryAfter, *logErr.RetryAfter)
+	}
+	assert.Equal(t, "retry once", logErr.NextAction)
+}
+
 func TestWrap_Good(t *testing.T) {
 	underlying := errors.New("base")
 	err := Wrap(underlying, "handler.Process", "processing failed")
@@ -93,6 +108,22 @@ func TestWrap_PreservesCode_Good(t *testing.T) {
 	assert.NotNil(t, outer)
 	assert.Equal(t, "VALIDATION_ERROR", ErrCode(outer))
 	assert.Contains(t, outer.Error(), "[VALIDATION_ERROR]")
+}
+
+func TestWrap_PreservesRecovery_Good(t *testing.T) {
+	retryAfter := 15 * time.Second
+	inner := &Err{Msg: "inner", Retryable: true, RetryAfter: &retryAfter, NextAction: "inspect input"}
+
+	outer := Wrap(inner, "outer.Op", "outer context")
+
+	assert.NotNil(t, outer)
+	var logErr *Err
+	assert.True(t, As(outer, &logErr))
+	assert.True(t, logErr.Retryable)
+	if assert.NotNil(t, logErr.RetryAfter) {
+		assert.Equal(t, retryAfter, *logErr.RetryAfter)
+	}
+	assert.Equal(t, "inspect input", logErr.NextAction)
 }
 
 func TestWrap_PreservesCode_FromNestedChain_Good(t *testing.T) {
@@ -120,6 +151,20 @@ func TestWrapCode_Good(t *testing.T) {
 	assert.Contains(t, err.Error(), "[INVALID_INPUT]")
 }
 
+func TestWrapCodeWithRecovery_Good(t *testing.T) {
+	retryAfter := time.Minute
+	err := WrapCodeWithRecovery(errors.New("validation failed"), "INVALID_INPUT", "api.Validate", "bad request", true, &retryAfter, "retry with backoff")
+
+	var logErr *Err
+	assert.NotNil(t, err)
+	assert.True(t, As(err, &logErr))
+	assert.True(t, logErr.Retryable)
+	assert.NotNil(t, logErr.RetryAfter)
+	assert.Equal(t, retryAfter, *logErr.RetryAfter)
+	assert.Equal(t, "retry with backoff", logErr.NextAction)
+	assert.Equal(t, "INVALID_INPUT", logErr.Code)
+}
+
 func TestWrapCode_Good_NilError(t *testing.T) {
 	// WrapCode with nil error but with code still creates an error
 	err := WrapCode(nil, "CODE", "op", "msg")
@@ -139,6 +184,19 @@ func TestNewCode_Good(t *testing.T) {
 	assert.Equal(t, "NOT_FOUND", logErr.Code)
 	assert.Equal(t, "resource not found", logErr.Msg)
 	assert.Nil(t, logErr.Err)
+}
+
+func TestNewCodeWithRecovery_Good(t *testing.T) {
+	retryAfter := 2 * time.Minute
+	err := NewCodeWithRecovery("NOT_FOUND", "resource not found", false, &retryAfter, "contact support")
+
+	var logErr *Err
+	assert.NotNil(t, err)
+	assert.True(t, As(err, &logErr))
+	assert.False(t, logErr.Retryable)
+	assert.NotNil(t, logErr.RetryAfter)
+	assert.Equal(t, retryAfter, *logErr.RetryAfter)
+	assert.Equal(t, "contact support", logErr.NextAction)
 }
 
 // --- Standard Library Wrapper Tests ---
@@ -203,6 +261,25 @@ func TestErrCode_Good_PlainError(t *testing.T) {
 
 func TestErrCode_Good_Nil(t *testing.T) {
 	assert.Equal(t, "", ErrCode(nil))
+}
+
+func TestRetryAfter_Good(t *testing.T) {
+	retryAfter := 42 * time.Second
+	err := &Err{Msg: "typed", RetryAfter: &retryAfter}
+
+	got, ok := RetryAfter(err)
+	assert.True(t, ok)
+	assert.Equal(t, retryAfter, *got)
+}
+
+func TestIsRetryable_Good(t *testing.T) {
+	err := &Err{Msg: "typed", Retryable: true}
+	assert.True(t, IsRetryable(err))
+}
+
+func TestRecoveryAction_Good(t *testing.T) {
+	err := &Err{Msg: "typed", NextAction: "inspect"}
+	assert.Equal(t, "inspect", RecoveryAction(err))
 }
 
 func TestMessage_Good(t *testing.T) {

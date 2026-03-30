@@ -2,10 +2,12 @@ package log
 
 import (
 	"bytes"
+	"errors"
 	goio "io"
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // nopWriteCloser wraps a writer with a no-op Close for testing rotation.
@@ -96,6 +98,26 @@ func TestLogger_ErrorContext_Good(t *testing.T) {
 	}
 	if !strings.Contains(got, "stack=\"outer.Op -> test.Op\"") {
 		t.Errorf("expected output to contain stack=\"outer.Op -> test.Op\", got %q", got)
+	}
+}
+
+func TestLogger_ErrorContextIncludesRecovery_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Output: &buf, Level: LevelInfo})
+	retryAfter := 45 * time.Second
+
+	err := EWithRecovery("retryable.Op", "temporary failure", errors.New("temporary failure"), true, &retryAfter, "retry with backoff")
+	l.Error("request failed", "err", err)
+
+	output := buf.String()
+	if !strings.Contains(output, "retryable=true") {
+		t.Errorf("expected output to contain retryable=true, got %q", output)
+	}
+	if !strings.Contains(output, "retry_after_seconds=45") {
+		t.Errorf("expected output to contain retry_after_seconds=45, got %q", output)
+	}
+	if !strings.Contains(output, "next_action=\"retry with backoff\"") {
+		t.Errorf("expected output to contain next_action=\"retry with backoff\", got %q", output)
 	}
 }
 
