@@ -102,24 +102,33 @@ func NewCode(code, msg string) error {
 
 // Is reports whether any error in err's tree matches target.
 // Wrapper around errors.Is for convenience.
+//
+//	if log.Is(err, context.DeadlineExceeded) { /* handle timeout */ }
 func Is(err, target error) bool {
 	return errors.Is(err, target)
 }
 
 // As finds the first error in err's tree that matches target.
 // Wrapper around errors.As for convenience.
+//
+//	var e *log.Err
+//	if log.As(err, &e) { /* use e.Code */ }
 func As(err error, target any) bool {
 	return errors.As(err, target)
 }
 
 // NewError creates a simple error with the given text.
 // Wrapper around errors.New for convenience.
+//
+//	return log.NewError("invalid state")
 func NewError(text string) error {
 	return errors.New(text)
 }
 
 // Join combines multiple errors into one.
 // Wrapper around errors.Join for convenience.
+//
+//	return log.Join(validateErr, persistErr)
 func Join(errs ...error) error {
 	return errors.Join(errs...)
 }
@@ -152,6 +161,8 @@ func ErrCode(err error) string {
 
 // Message extracts the message from an error.
 // Returns the error's Error() string if not an *Err.
+//
+//	msg := log.Message(err)
 func Message(err error) string {
 	if err == nil {
 		return ""

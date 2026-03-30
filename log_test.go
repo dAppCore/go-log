@@ -12,7 +12,7 @@ type nopWriteCloser struct{ goio.Writer }
 
 func (nopWriteCloser) Close() error { return nil }
 
-func TestLogger_Levels(t *testing.T) {
+func TestLogger_Levels_Good(t *testing.T) {
 	tests := []struct {
 		name     string
 		level    Level
@@ -62,7 +62,7 @@ func TestLogger_Levels(t *testing.T) {
 	}
 }
 
-func TestLogger_KeyValues(t *testing.T) {
+func TestLogger_KeyValues_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelDebug, Output: &buf})
 
@@ -80,7 +80,7 @@ func TestLogger_KeyValues(t *testing.T) {
 	}
 }
 
-func TestLogger_ErrorContext(t *testing.T) {
+func TestLogger_ErrorContext_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Output: &buf, Level: LevelInfo})
 
@@ -98,7 +98,7 @@ func TestLogger_ErrorContext(t *testing.T) {
 	}
 }
 
-func TestLogger_Redaction(t *testing.T) {
+func TestLogger_Redaction_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{
 		Level:      LevelInfo,
@@ -120,7 +120,7 @@ func TestLogger_Redaction(t *testing.T) {
 	}
 }
 
-func TestLogger_InjectionPrevention(t *testing.T) {
+func TestLogger_InjectionPrevention_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelInfo, Output: &buf})
 
@@ -174,7 +174,7 @@ func TestLogger_MessageSanitization_Good(t *testing.T) {
 	}
 }
 
-func TestLogger_SetLevel(t *testing.T) {
+func TestLogger_SetLevel_Good(t *testing.T) {
 	l := New(Options{Level: LevelInfo})
 
 	if l.Level() != LevelInfo {
@@ -192,7 +192,7 @@ func TestLogger_SetLevel(t *testing.T) {
 	}
 }
 
-func TestLevel_String(t *testing.T) {
+func TestLevel_String_Good(t *testing.T) {
 	tests := []struct {
 		level    Level
 		expected string
@@ -214,7 +214,7 @@ func TestLevel_String(t *testing.T) {
 	}
 }
 
-func TestLogger_Security(t *testing.T) {
+func TestLogger_Security_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelError, Output: &buf})
 

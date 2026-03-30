@@ -336,18 +336,18 @@ func TestStackTrace_Good(t *testing.T) {
 	assert.Equal(t, "op3 -> op2 -> op1", formatted)
 }
 
-func TestStackTrace_PlainError(t *testing.T) {
+func TestStackTrace_Bad_PlainError(t *testing.T) {
 	err := errors.New("plain error")
 	assert.Empty(t, StackTrace(err))
 	assert.Empty(t, FormatStackTrace(err))
 }
 
-func TestStackTrace_Nil(t *testing.T) {
+func TestStackTrace_Bad_Nil(t *testing.T) {
 	assert.Empty(t, StackTrace(nil))
 	assert.Empty(t, FormatStackTrace(nil))
 }
 
-func TestStackTrace_NoOp(t *testing.T) {
+func TestStackTrace_Bad_NoOp(t *testing.T) {
 	err := &Err{Msg: "no op"}
 	assert.Empty(t, StackTrace(err))
 	assert.Empty(t, FormatStackTrace(err))

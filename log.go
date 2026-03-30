@@ -73,13 +73,18 @@ type Logger struct {
 	// RedactKeys is a list of keys whose values should be masked in logs.
 	redactKeys []string
 
-	// Style functions for formatting (can be overridden)
+	// StyleTimestamp formats the rendered timestamp prefix.
 	StyleTimestamp func(string) string
-	StyleDebug     func(string) string
-	StyleInfo      func(string) string
-	StyleWarn      func(string) string
-	StyleError     func(string) string
-	StyleSecurity  func(string) string
+	// StyleDebug formats the debug level prefix.
+	StyleDebug func(string) string
+	// StyleInfo formats the info level prefix.
+	StyleInfo func(string) string
+	// StyleWarn formats the warning level prefix.
+	StyleWarn func(string) string
+	// StyleError formats the error level prefix.
+	StyleError func(string) string
+	// StyleSecurity formats the security event prefix.
+	StyleSecurity func(string) string
 }
 
 // RotationOptions defines the log rotation and retention policy.
@@ -107,6 +112,7 @@ type RotationOptions struct {
 
 // Options configures a Logger.
 type Options struct {
+	// Level controls which messages are emitted.
 	Level Level
 	// Output is the destination for log messages. If Rotation is provided,
 	// Output is ignored and logs are written to the rotating file instead.
@@ -266,11 +272,11 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 			if i > 0 {
 				kvStr += " "
 			}
-		key := normaliseLogText(fmt.Sprintf("%v", keyvals[i]))
-		var val any
-		if i+1 < len(keyvals) {
-			val = keyvals[i+1]
-		}
+			key := normaliseLogText(fmt.Sprintf("%v", keyvals[i]))
+			var val any
+			if i+1 < len(keyvals) {
+				val = keyvals[i+1]
+			}
 
 			// Redaction logic
 			if shouldRedact(key, redactKeys) {
@@ -279,12 +285,12 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 
 			// Secure formatting to prevent log injection
 			if s, ok := val.(string); ok {
-			kvStr += fmt.Sprintf("%s=%q", key, s)
-		} else {
-			kvStr += fmt.Sprintf("%s=%v", key, normaliseLogText(fmt.Sprintf("%v", val)))
+				kvStr += fmt.Sprintf("%s=%q", key, s)
+			} else {
+				kvStr += fmt.Sprintf("%s=%v", key, normaliseLogText(fmt.Sprintf("%v", val)))
+			}
 		}
 	}
-}
 
 	_, _ = fmt.Fprintf(output, "%s %s %s%s\n", timestamp, prefix, normaliseLogText(msg), kvStr)
 }
@@ -404,36 +410,50 @@ func SetDefault(l *Logger) {
 }
 
 // SetLevel sets the default logger's level.
+//
+//	log.SetLevel(log.LevelDebug)
 func SetLevel(level Level) {
 	Default().SetLevel(level)
 }
 
 // SetRedactKeys sets the default logger's redaction keys.
+//
+//	log.SetRedactKeys("password", "token")
 func SetRedactKeys(keys ...string) {
 	Default().SetRedactKeys(keys...)
 }
 
 // Debug logs to the default logger.
+//
+//	log.Debug("query started", "sql", query)
 func Debug(msg string, keyvals ...any) {
 	Default().Debug(msg, keyvals...)
 }
 
 // Info logs to the default logger.
+//
+//	log.Info("server ready", "port", 8080)
 func Info(msg string, keyvals ...any) {
 	Default().Info(msg, keyvals...)
 }
 
 // Warn logs to the default logger.
+//
+//	log.Warn("retrying request", "attempt", 2)
 func Warn(msg string, keyvals ...any) {
 	Default().Warn(msg, keyvals...)
 }
 
 // Error logs to the default logger.
+//
+//	log.Error("request failed", "err", err)
 func Error(msg string, keyvals ...any) {
 	Default().Error(msg, keyvals...)
 }
 
 // Security logs to the default logger.
+//
+//	log.Security("suspicious login", "ip", remoteAddr)
 func Security(msg string, keyvals ...any) {
 	Default().Security(msg, keyvals...)
 }
