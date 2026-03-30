@@ -5,7 +5,7 @@ description: Structured logging and error handling for Core applications
 
 # go-log
 
-`forge.lthn.ai/core/go-log` provides structured logging and contextual error
+`dappco.re/go/core/log` provides structured logging and contextual error
 handling for Go applications built on the Core framework.  It is a small,
 zero-dependency library (only `testify` at test time) that replaces ad-hoc
 `fmt.Println` / `log.Printf` calls with level-filtered, key-value structured
@@ -15,7 +15,7 @@ stack.
 ## Quick Start
 
 ```go
-import "forge.lthn.ai/core/go-log"
+import "dappco.re/go/core/log"
 
 // Use the package-level default logger straight away
 log.SetLevel(log.LevelDebug)
@@ -54,6 +54,10 @@ log.Op(err)             // "user.Save"
 log.Root(err)           // the original underlyingErr
 log.StackTrace(err)     // ["user.Save", "db.Connect"]
 log.FormatStackTrace(err) // "user.Save -> db.Connect"
+
+// Recovery hints are also available when the error carries them
+log.IsRetryable(err)    // false unless a wrapped Err marks it retryable
+log.RecoveryAction(err) // "retry with backoff" when provided
 ```
 
 ### Combined Log-and-Return
@@ -70,7 +74,7 @@ if err != nil {
 | File | Purpose |
 |------|---------|
 | `log.go` | Logger type, log levels, key-value formatting, redaction, default logger, `Username()` helper |
-| `errors.go` | `Err` structured error type, creation helpers (`E`, `Wrap`, `WrapCode`, `NewCode`), introspection (`Op`, `ErrCode`, `Root`, `StackTrace`), combined log-and-return helpers (`LogError`, `LogWarn`, `Must`) |
+| `errors.go` | `Err` structured error type, creation helpers (`E`, `Wrap`, `WrapCode`, `NewCode`, and recovery-aware variants), introspection (`Op`, `ErrCode`, `Root`, `StackTrace`, recovery hints), combined log-and-return helpers (`LogError`, `LogWarn`, `Must`) |
 | `log_test.go` | Tests for the Logger: level filtering, key-value output, redaction, injection prevention, security logging |
 | `errors_test.go` | Tests for structured errors: creation, wrapping, code propagation, introspection, stack traces, log-and-return helpers |
 
@@ -89,7 +93,7 @@ code.
 ## Module Path
 
 ```
-forge.lthn.ai/core/go-log
+dappco.re/go/core/log
 ```
 
 Requires **Go 1.26+** (uses `iter.Seq` from the standard library).

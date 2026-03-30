@@ -8,15 +8,20 @@
 `type Err struct`
 
 Structured error wrapper that carries operation context, a human-readable message, an optional wrapped cause, and an optional machine-readable code.
+It can also carry agent-facing recovery metadata that survives wrapping and is
+surfaced automatically in structured logs.
 
 Fields:
 - `Op string`: operation name. When non-empty, `Error` prefixes the formatted message with `Op + ": "`.
 - `Msg string`: human-readable message stored on the error and returned by `Message`.
 - `Err error`: wrapped cause returned by `Unwrap`.
 - `Code string`: optional machine-readable code. When non-empty, `Error` includes it in square brackets.
+- `Retryable bool`: whether the caller can safely retry the operation.
+- `RetryAfter *time.Duration`: optional retry delay hint when `Retryable` is true.
+- `NextAction string`: suggested next step when the error is not directly retryable.
 
 Methods:
-- `func (e *Err) Error() string`: formats the error text from `Op`, `Msg`, `Code`, and `Err`. The result omits missing parts, so the output can be `"{Msg}"`, `"{Msg} [{Code}]"`, `"{Msg}: {Err}"`, or `"{Op}: {Msg} [{Code}]: {Err}"`.
+- `func (e *Err) Error() string`: formats the error text from `Op`, `Msg`, `Code`, and `Err`. The result omits missing parts, so the output can be `"{Msg}"`, `"{Msg} [{Code}]"`, `"{Msg}: {Err}"`, `"{Op}: {Msg} [{Code}]: {Err}"`, or a cleanly collapsed form such as `"{Op}"` when no message, code, or cause is present.
 - `func (e *Err) Unwrap() error`: returns `e.Err`.
 
 ### Level
@@ -32,7 +37,7 @@ Methods:
 
 Concurrency-safe structured logger. `New` clones the configured redaction keys, stores the configured level and writer, and initializes all style hooks to identity functions.
 
-Each log call writes one line in the form `HH:MM:SS {prefix} {msg}` followed by space-separated key/value pairs. String values are rendered with Go `%q` quoting, redacted keys are replaced with `"[REDACTED]"`, a trailing key without a value renders as `<nil>`, and any `error` value in `keyvals` can cause `op` and `stack` fields to be appended automatically if those keys were not already supplied.
+Each log call writes one line in the form `HH:MM:SS {prefix} {msg}` followed by space-separated key/value pairs. String values are rendered with Go `%q` quoting, redacted keys are replaced with `"[REDACTED]"`, a trailing key without a value renders as `<nil>`, and any `error` value in `keyvals` can cause `op`, `stack`, `retryable`, `retry_after_seconds`, and `next_action` fields to be appended automatically if those keys were not already supplied.
 
 Fields:
 - `StyleTimestamp func(string) string`: transforms the rendered `HH:MM:SS` timestamp before it is written.
@@ -103,6 +108,12 @@ Returns the package-level default logger. The package initializes it with `New(O
 
 Returns `&Err{Op: op, Msg: msg, Err: err}` as an `error`. It always returns a non-nil error value, even when `err` is nil.
 
+### EWithRecovery
+`func EWithRecovery(op, msg string, err error, retryable bool, retryAfter *time.Duration, nextAction string) error`
+
+Returns `&Err{Op: op, Msg: msg, Err: err}` with explicit recovery metadata
+attached to the new error value.
+
 ### ErrCode
 `func ErrCode(err error) string`
 
@@ -133,6 +144,16 @@ Thin wrapper around `errors.Is`.
 
 Thin wrapper around `errors.Join`.
 
+### IsRetryable
+`func IsRetryable(err error) bool`
+
+Returns whether the first matching `*Err` in the chain is marked retryable.
+
+### NewCodeWithRecovery
+`func NewCodeWithRecovery(code, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error`
+
+Returns `&Err{Msg: msg, Code: code}` with recovery metadata attached.
+
 ### LogError
 `func LogError(err error, op, msg string) error`
 
@@ -162,6 +183,16 @@ Constructs a logger from `opts`. It prefers a rotating writer only when `opts.Ro
 `func NewCode(code, msg string) error`
 
 Returns `&Err{Msg: msg, Code: code}` as an `error`.
+
+### RecoveryAction
+`func RecoveryAction(err error) string`
+
+Returns the first next-action hint from the error chain.
+
+### RetryAfter
+`func RetryAfter(err error) (*time.Duration, bool)`
+
+Returns the first retry-after hint from the error chain, if present.
 
 ### NewError
 `func NewError(text string) error`
@@ -218,7 +249,18 @@ Calls `Default().Warn(msg, keyvals...)`.
 
 If `err` is nil, returns nil. Otherwise returns a new `*Err` containing `op`, `msg`, and `err`. If the wrapped error chain already contains an `*Err` with a non-empty `Code`, the new wrapper copies that code.
 
+### WrapCodeWithRecovery
+`func WrapCodeWithRecovery(err error, code, op, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error`
+
+Returns nil only when both `err` is nil and `code` is empty. Otherwise it
+returns a wrapped `*Err` with explicit recovery metadata attached.
+
 ### WrapCode
 `func WrapCode(err error, code, op, msg string) error`
 
 Returns nil only when both `err` is nil and `code` is empty. In every other case it returns `&Err{Op: op, Msg: msg, Err: err, Code: code}` as an `error`.
+
+### WrapWithRecovery
+`func WrapWithRecovery(err error, op, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error`
+
+Returns nil when `err` is nil. Otherwise it returns a wrapped `*Err` with explicit recovery metadata attached.

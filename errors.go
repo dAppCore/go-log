@@ -7,7 +7,6 @@ package log
 
 import (
 	"errors"
-	"fmt"
 	"iter"
 	"strings"
 	"time"
@@ -30,20 +29,34 @@ type Err struct {
 
 // Error implements the error interface.
 func (e *Err) Error() string {
-	var prefix string
-	if e.Op != "" {
-		prefix = e.Op + ": "
+	if e == nil {
+		return ""
 	}
-	if e.Err != nil {
+
+	body := e.Msg
+	if body == "" {
 		if e.Code != "" {
-			return fmt.Sprintf("%s%s [%s]: %v", prefix, e.Msg, e.Code, e.Err)
+			body = "[" + e.Code + "]"
 		}
-		return fmt.Sprintf("%s%s: %v", prefix, e.Msg, e.Err)
+	} else if e.Code != "" {
+		body += " [" + e.Code + "]"
 	}
-	if e.Code != "" {
-		return fmt.Sprintf("%s%s [%s]", prefix, e.Msg, e.Code)
+
+	if e.Err != nil {
+		if body != "" {
+			body += ": " + e.Err.Error()
+		} else {
+			body = e.Err.Error()
+		}
 	}
-	return fmt.Sprintf("%s%s", prefix, e.Msg)
+
+	if e.Op != "" {
+		if body != "" {
+			return e.Op + ": " + body
+		}
+		return e.Op
+	}
+	return body
 }
 
 // Unwrap returns the underlying error for use with errors.Is and errors.As.
@@ -65,6 +78,8 @@ func E(op, msg string, err error) error {
 }
 
 // EWithRecovery creates a new Err with operation context and recovery metadata.
+//
+//	return log.EWithRecovery("api.Call", "temporary failure", err, true, &retryAfter, "retry with backoff")
 func EWithRecovery(op, msg string, err error, retryable bool, retryAfter *time.Duration, nextAction string) error {
 	recoveryErr := &Err{
 		Op:  op,
@@ -95,6 +110,8 @@ func Wrap(err error, op, msg string) error {
 }
 
 // WrapWithRecovery wraps an error with operation context and explicit recovery metadata.
+//
+//	return log.WrapWithRecovery(err, "api.Call", "temporary failure", true, &retryAfter, "retry with backoff")
 func WrapWithRecovery(err error, op, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error {
 	if err == nil {
 		return nil
@@ -132,6 +149,8 @@ func WrapCode(err error, code, op, msg string) error {
 }
 
 // WrapCodeWithRecovery wraps an error with operation context, code, and recovery metadata.
+//
+//	return log.WrapCodeWithRecovery(err, "TEMPORARY_UNAVAILABLE", "api.Call", "temporary failure", true, &retryAfter, "retry with backoff")
 func WrapCodeWithRecovery(err error, code, op, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error {
 	if code == "" {
 		code = ErrCode(err)
@@ -163,6 +182,8 @@ func NewCode(code, msg string) error {
 }
 
 // NewCodeWithRecovery creates a coded error with recovery metadata.
+//
+//	var ErrTemporary = log.NewCodeWithRecovery("TEMPORARY_UNAVAILABLE", "temporary failure", true, &retryAfter, "retry with backoff")
 func NewCodeWithRecovery(code, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error {
 	return &Err{
 		Msg:        msg,
@@ -187,6 +208,8 @@ func inheritRecovery(dst *Err, err error) {
 }
 
 // RetryAfter returns the first retry-after hint from an error chain, if present.
+//
+//	retryAfter, ok := log.RetryAfter(err)
 func RetryAfter(err error) (*time.Duration, bool) {
 	var wrapped *Err
 	if As(err, &wrapped) {
@@ -198,6 +221,8 @@ func RetryAfter(err error) (*time.Duration, bool) {
 }
 
 // IsRetryable reports whether the error chain contains a retryable Err.
+//
+//	if log.IsRetryable(err) { /* retry the operation */ }
 func IsRetryable(err error) bool {
 	var wrapped *Err
 	if As(err, &wrapped) {
@@ -207,6 +232,8 @@ func IsRetryable(err error) bool {
 }
 
 // RecoveryAction returns the first next action from an error chain.
+//
+//	next := log.RecoveryAction(err)
 func RecoveryAction(err error) string {
 	var wrapped *Err
 	if As(err, &wrapped) {

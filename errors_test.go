@@ -45,6 +45,20 @@ func TestErr_Error_EmptyOp_Good(t *testing.T) {
 	assert.Equal(t, "wrapped: underlying", err.Error())
 }
 
+func TestErr_Error_EmptyMsg_Good(t *testing.T) {
+	err := &Err{Op: "api.Call", Code: "TIMEOUT"}
+	assert.Equal(t, "api.Call: [TIMEOUT]", err.Error())
+
+	err = &Err{Op: "api.Call", Err: errors.New("underlying")}
+	assert.Equal(t, "api.Call: underlying", err.Error())
+
+	err = &Err{Op: "api.Call", Code: "TIMEOUT", Err: errors.New("underlying")}
+	assert.Equal(t, "api.Call: [TIMEOUT]: underlying", err.Error())
+
+	err = &Err{Op: "api.Call"}
+	assert.Equal(t, "api.Call", err.Error())
+}
+
 func TestErr_Unwrap_Good(t *testing.T) {
 	underlying := errors.New("underlying error")
 	err := &Err{Op: "test", Msg: "wrapped", Err: underlying}
