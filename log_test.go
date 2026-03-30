@@ -3,6 +3,7 @@ package log
 import (
 	"bytes"
 	goio "io"
+	"os"
 	"strings"
 	"testing"
 )
@@ -117,6 +118,22 @@ func TestLogger_Redaction_Good(t *testing.T) {
 	}
 	if !strings.Contains(output, "token=\"[REDACTED]\"") {
 		t.Errorf("expected token=\"[REDACTED]\", got %q", output)
+	}
+}
+
+func TestLogger_Redaction_Good_CaseInsensitiveKeys(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{
+		Level:      LevelInfo,
+		Output:     &buf,
+		RedactKeys: []string{"password"},
+	})
+
+	l.Info("login", "PASSWORD", "secret123")
+
+	output := buf.String()
+	if !strings.Contains(output, "PASSWORD=\"[REDACTED]\"") {
+		t.Errorf("expected case-insensitive redaction, got %q", output)
 	}
 }
 
@@ -248,6 +265,17 @@ func TestLogger_SetOutput_Good(t *testing.T) {
 	}
 }
 
+func TestLogger_SetOutput_Bad_NilFallsBackToStderr(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	l.SetOutput(nil)
+
+	if l.output != os.Stderr {
+		t.Errorf("expected nil output to fallback to os.Stderr, got %T", l.output)
+	}
+}
+
 func TestLogger_SetRedactKeys_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelInfo, Output: &buf})
@@ -333,11 +361,44 @@ func TestNew_RotationFactory_Good(t *testing.T) {
 	}
 }
 
+func TestNew_RotationFactory_Good_DefaultRetentionValues(t *testing.T) {
+	original := RotationWriterFactory
+	defer func() { RotationWriterFactory = original }()
+
+	var captured RotationOptions
+	RotationWriterFactory = func(opts RotationOptions) goio.WriteCloser {
+		captured = opts
+		return nopWriteCloser{goio.Discard}
+	}
+
+	_ = New(Options{
+		Level:    LevelInfo,
+		Rotation: &RotationOptions{Filename: "test.log"},
+	})
+
+	if captured.MaxSize != defaultRotationMaxSize {
+		t.Errorf("expected default MaxSize=%d, got %d", defaultRotationMaxSize, captured.MaxSize)
+	}
+	if captured.MaxAge != defaultRotationMaxAge {
+		t.Errorf("expected default MaxAge=%d, got %d", defaultRotationMaxAge, captured.MaxAge)
+	}
+	if captured.MaxBackups != defaultRotationMaxBackups {
+		t.Errorf("expected default MaxBackups=%d, got %d", defaultRotationMaxBackups, captured.MaxBackups)
+	}
+}
+
 func TestNew_DefaultOutput_Good(t *testing.T) {
 	// No output or rotation — should default to stderr (not nil)
 	l := New(Options{Level: LevelInfo})
 	if l.output == nil {
 		t.Error("expected non-nil output when no Output specified")
+	}
+}
+
+func TestNew_Bad_InvalidLevelDefaultsToInfo(t *testing.T) {
+	l := New(Options{Level: Level(99)})
+	if l.Level() != LevelInfo {
+		t.Errorf("expected invalid level to default to info, got %v", l.Level())
 	}
 }
 
@@ -371,6 +432,50 @@ func TestDefault_Good(t *testing.T) {
 	Warn("warn msg")
 	Error("error msg")
 	Security("sec msg")
+
+	output := buf.String()
+	for _, tag := range []string{"[DBG]", "[INF]", "[WRN]", "[ERR]", "[SEC]"} {
+		if !strings.Contains(output, tag) {
+			t.Errorf("expected %s in output, got %q", tag, output)
+		}
+	}
+}
+
+func TestDefault_Bad_SetDefaultNilIgnored(t *testing.T) {
+	original := Default()
+	var buf bytes.Buffer
+	custom := New(Options{Level: LevelInfo, Output: &buf})
+	SetDefault(custom)
+	defer SetDefault(original)
+
+	SetDefault(nil)
+
+	if Default() != custom {
+		t.Error("expected SetDefault(nil) to preserve the current default logger")
+	}
+}
+
+func TestLogger_StyleHooks_Bad_NilHooksDoNotPanic(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelDebug, Output: &buf})
+	l.StyleTimestamp = nil
+	l.StyleDebug = nil
+	l.StyleInfo = nil
+	l.StyleWarn = nil
+	l.StyleError = nil
+	l.StyleSecurity = nil
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("expected nil style hooks not to panic, got panic: %v", r)
+		}
+	}()
+
+	l.Debug("debug")
+	l.Info("info")
+	l.Warn("warn")
+	l.Error("error")
+	l.Security("security")
 
 	output := buf.String()
 	for _, tag := range []string{"[DBG]", "[INF]", "[WRN]", "[ERR]", "[SEC]"} {

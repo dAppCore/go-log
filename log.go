@@ -128,6 +128,12 @@ type Options struct {
 var RotationWriterFactory func(RotationOptions) goio.WriteCloser
 
 // New creates a new Logger with the given options.
+//
+//	logger := log.New(log.Options{
+//	    Level:      log.LevelInfo,
+//	    Output:     os.Stdout,
+//	    RedactKeys: []string{"password", "token"},
+//	})
 func New(opts Options) *Logger {
 	level := normaliseLevel(opts.Level)
 
@@ -359,6 +365,8 @@ func (l *Logger) Security(msg string, keyvals ...any) {
 
 // Username returns the current system username.
 // It uses os/user for reliability and falls back to environment variables.
+//
+//	user := log.Username()
 func Username() string {
 	if u, err := user.Current(); err == nil {
 		return u.Username
@@ -398,6 +406,7 @@ func Default() *Logger {
 }
 
 // SetDefault sets the default logger.
+// Passing nil is ignored to preserve the current default logger.
 //
 //	log.SetDefault(customLogger)
 func SetDefault(l *Logger) {
