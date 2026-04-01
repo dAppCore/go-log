@@ -390,6 +390,23 @@ func TestLogError_Good(t *testing.T) {
 	assert.Contains(t, output, "op=\"db.Connect\"")
 }
 
+func TestLogError_Good_LogsOriginalErrorContext(t *testing.T) {
+	var buf bytes.Buffer
+	logger := New(Options{Level: LevelDebug, Output: &buf})
+	SetDefault(logger)
+	defer SetDefault(New(Options{Level: LevelInfo}))
+
+	underlying := E("db.Query", "query failed", errors.New("timeout"))
+	err := LogError(underlying, "db.Connect", "database unavailable")
+
+	assert.NotNil(t, err)
+
+	output := buf.String()
+	assert.Contains(t, output, "op=\"db.Connect\"")
+	assert.Contains(t, output, "stack=\"db.Query\"")
+	assert.NotContains(t, output, "stack=\"db.Connect -> db.Query\"")
+}
+
 func TestLogError_Good_NilError(t *testing.T) {
 	var buf bytes.Buffer
 	logger := New(Options{Level: LevelDebug, Output: &buf})

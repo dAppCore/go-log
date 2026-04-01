@@ -408,7 +408,7 @@ func LogError(err error, op, msg string) error {
 		return nil
 	}
 	wrapped := Wrap(err, op, msg)
-	Default().Error(msg, "op", op, "err", wrapped)
+	Default().Error(msg, "op", op, "err", err)
 	return wrapped
 }
 
@@ -423,7 +423,7 @@ func LogWarn(err error, op, msg string) error {
 		return nil
 	}
 	wrapped := Wrap(err, op, msg)
-	Default().Warn(msg, "op", op, "err", wrapped)
+	Default().Warn(msg, "op", op, "err", err)
 	return wrapped
 }
 
@@ -436,7 +436,7 @@ func LogWarn(err error, op, msg string) error {
 func Must(err error, op, msg string) {
 	if err != nil {
 		wrapped := Wrap(err, op, msg)
-		Default().Error(msg, "op", op, "err", wrapped)
+		Default().Error(msg, "op", op, "err", err)
 		panic(wrapped)
 	}
 }
