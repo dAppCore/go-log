@@ -165,6 +165,16 @@ func TestWrapCode_Good(t *testing.T) {
 	assert.Contains(t, err.Error(), "[INVALID_INPUT]")
 }
 
+func TestWrapCode_Good_EmptyCodeDoesNotInherit(t *testing.T) {
+	inner := WrapCode(errors.New("base"), "INNER_CODE", "inner.Op", "inner failed")
+
+	outer := WrapCode(inner, "", "outer.Op", "outer failed")
+
+	var logErr *Err
+	assert.True(t, As(outer, &logErr))
+	assert.Equal(t, "", logErr.Code)
+}
+
 func TestWrapCodeWithRecovery_Good(t *testing.T) {
 	retryAfter := time.Minute
 	err := WrapCodeWithRecovery(errors.New("validation failed"), "INVALID_INPUT", "api.Validate", "bad request", true, &retryAfter, "retry with backoff")
@@ -177,6 +187,17 @@ func TestWrapCodeWithRecovery_Good(t *testing.T) {
 	assert.Equal(t, retryAfter, *logErr.RetryAfter)
 	assert.Equal(t, "retry with backoff", logErr.NextAction)
 	assert.Equal(t, "INVALID_INPUT", logErr.Code)
+}
+
+func TestWrapCodeWithRecovery_Good_EmptyCodeDoesNotInherit(t *testing.T) {
+	retryAfter := time.Minute
+	inner := WrapCodeWithRecovery(errors.New("validation failed"), "INNER_CODE", "inner.Op", "inner failed", true, &retryAfter, "retry later")
+
+	outer := WrapCodeWithRecovery(inner, "", "outer.Op", "outer failed", true, &retryAfter, "retry later")
+
+	var logErr *Err
+	assert.True(t, As(outer, &logErr))
+	assert.Equal(t, "", logErr.Code)
 }
 
 func TestWrapCode_Good_NilError(t *testing.T) {

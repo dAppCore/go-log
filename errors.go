@@ -137,9 +137,6 @@ func WrapWithRecovery(err error, op, msg string, retryable bool, retryAfter *tim
 //
 //	return log.WrapCode(err, "VALIDATION_ERROR", "user.Validate", "invalid email")
 func WrapCode(err error, code, op, msg string) error {
-	if code == "" {
-		code = ErrCode(err)
-	}
 	if err == nil && code == "" {
 		return nil
 	}
@@ -152,9 +149,6 @@ func WrapCode(err error, code, op, msg string) error {
 //
 //	return log.WrapCodeWithRecovery(err, "TEMPORARY_UNAVAILABLE", "api.Call", "temporary failure", true, &retryAfter, "retry with backoff")
 func WrapCodeWithRecovery(err error, code, op, msg string, retryable bool, retryAfter *time.Duration, nextAction string) error {
-	if code == "" {
-		code = ErrCode(err)
-	}
 	if err == nil && code == "" {
 		return nil
 	}
