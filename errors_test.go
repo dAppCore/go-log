@@ -124,6 +124,17 @@ func TestWrap_PreservesCode_Good(t *testing.T) {
 	assert.Contains(t, outer.Error(), "[VALIDATION_ERROR]")
 }
 
+func TestWrap_PreservesCode_FromNestedErrWithEmptyOuterCode_Good(t *testing.T) {
+	inner := WrapCode(errors.New("base"), "VALIDATION_ERROR", "inner.Op", "validation failed")
+	mid := &Err{Op: "mid.Op", Msg: "mid failed", Err: inner}
+
+	outer := Wrap(mid, "outer.Op", "outer context")
+
+	assert.NotNil(t, outer)
+	assert.Equal(t, "VALIDATION_ERROR", ErrCode(outer))
+	assert.Contains(t, outer.Error(), "[VALIDATION_ERROR]")
+}
+
 func TestWrap_PreservesRecovery_Good(t *testing.T) {
 	retryAfter := 15 * time.Second
 	inner := &Err{Msg: "inner", Retryable: true, RetryAfter: &retryAfter, NextAction: "inspect input"}

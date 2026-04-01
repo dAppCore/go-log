@@ -104,7 +104,7 @@ func Wrap(err error, op, msg string) error {
 	if err == nil {
 		return nil
 	}
-	wrapped := &Err{Op: op, Msg: msg, Err: err, Code: ErrCode(err)}
+	wrapped := &Err{Op: op, Msg: msg, Err: err, Code: inheritedCode(err)}
 	inheritRecovery(wrapped, err)
 	return wrapped
 }
@@ -199,6 +199,17 @@ func inheritRecovery(dst *Err, err error) {
 		dst.RetryAfter = source.RetryAfter
 		dst.NextAction = source.NextAction
 	}
+}
+
+// inheritedCode returns the first non-empty code found in an error chain.
+func inheritedCode(err error) string {
+	for err != nil {
+		if wrapped, ok := err.(*Err); ok && wrapped.Code != "" {
+			return wrapped.Code
+		}
+		err = errors.Unwrap(err)
+	}
+	return ""
 }
 
 // RetryAfter returns the first retry-after hint from an error chain, if present.
