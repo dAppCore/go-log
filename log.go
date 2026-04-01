@@ -259,18 +259,18 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 		if As(err, &logErr) {
 			if _, hasRetryable := existing["retryable"]; !hasRetryable {
 				existing["retryable"] = struct{}{}
-				keyvals = append(keyvals, "retryable", logErr.Retryable)
+				keyvals = append(keyvals, "retryable", retryableHint(err))
 			}
-			if logErr.RetryAfter != nil {
+			if retryAfter, ok := RetryAfter(err); ok {
 				if _, hasRetryAfter := existing["retry_after_seconds"]; !hasRetryAfter {
 					existing["retry_after_seconds"] = struct{}{}
-					keyvals = append(keyvals, "retry_after_seconds", logErr.RetryAfter.Seconds())
+					keyvals = append(keyvals, "retry_after_seconds", retryAfter.Seconds())
 				}
 			}
-			if logErr.NextAction != "" {
+			if nextAction := RecoveryAction(err); nextAction != "" {
 				if _, hasNextAction := existing["next_action"]; !hasNextAction {
 					existing["next_action"] = struct{}{}
-					keyvals = append(keyvals, "next_action", logErr.NextAction)
+					keyvals = append(keyvals, "next_action", nextAction)
 				}
 			}
 		}

@@ -286,6 +286,16 @@ func TestRetryAfter_Good(t *testing.T) {
 	assert.Equal(t, retryAfter, *got)
 }
 
+func TestRetryAfter_Good_NestedChain(t *testing.T) {
+	retryAfter := 42 * time.Second
+	inner := &Err{Msg: "typed", RetryAfter: &retryAfter}
+	outer := &Err{Msg: "outer", Err: inner}
+
+	got, ok := RetryAfter(outer)
+	assert.True(t, ok)
+	assert.Equal(t, retryAfter, *got)
+}
+
 func TestIsRetryable_Good(t *testing.T) {
 	err := &Err{Msg: "typed", Retryable: true}
 	assert.True(t, IsRetryable(err))
@@ -294,6 +304,13 @@ func TestIsRetryable_Good(t *testing.T) {
 func TestRecoveryAction_Good(t *testing.T) {
 	err := &Err{Msg: "typed", NextAction: "inspect"}
 	assert.Equal(t, "inspect", RecoveryAction(err))
+}
+
+func TestRecoveryAction_Good_NestedChain(t *testing.T) {
+	inner := &Err{Msg: "typed", NextAction: "inspect"}
+	outer := &Err{Msg: "outer", Err: inner}
+
+	assert.Equal(t, "inspect", RecoveryAction(outer))
 }
 
 func TestMessage_Good(t *testing.T) {

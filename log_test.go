@@ -121,6 +121,33 @@ func TestLogger_ErrorContextIncludesRecovery_Good(t *testing.T) {
 	}
 }
 
+func TestLogger_ErrorContextIncludesNestedRecovery_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Output: &buf, Level: LevelInfo})
+	retryAfter := 30 * time.Second
+
+	inner := &Err{
+		Msg:        "inner failure",
+		Retryable:  true,
+		RetryAfter: &retryAfter,
+		NextAction: "retry later",
+	}
+	outer := &Err{Msg: "outer failure", Err: inner}
+
+	l.Error("request failed", "err", outer)
+
+	output := buf.String()
+	if !strings.Contains(output, "retryable=true") {
+		t.Errorf("expected output to contain retryable=true, got %q", output)
+	}
+	if !strings.Contains(output, "retry_after_seconds=30") {
+		t.Errorf("expected output to contain retry_after_seconds=30, got %q", output)
+	}
+	if !strings.Contains(output, "next_action=\"retry later\"") {
+		t.Errorf("expected output to contain next_action=\"retry later\", got %q", output)
+	}
+}
+
 func TestLogger_Redaction_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{

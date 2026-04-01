@@ -211,11 +211,11 @@ func inheritRecovery(dst *Err, err error) {
 //
 //	retryAfter, ok := log.RetryAfter(err)
 func RetryAfter(err error) (*time.Duration, bool) {
-	var wrapped *Err
-	if As(err, &wrapped) {
-		if wrapped.RetryAfter != nil {
+	for err != nil {
+		if wrapped, ok := err.(*Err); ok && wrapped.RetryAfter != nil {
 			return wrapped.RetryAfter, true
 		}
+		err = errors.Unwrap(err)
 	}
 	return nil, false
 }
@@ -235,11 +235,23 @@ func IsRetryable(err error) bool {
 //
 //	next := log.RecoveryAction(err)
 func RecoveryAction(err error) string {
-	var wrapped *Err
-	if As(err, &wrapped) {
-		return wrapped.NextAction
+	for err != nil {
+		if wrapped, ok := err.(*Err); ok && wrapped.NextAction != "" {
+			return wrapped.NextAction
+		}
+		err = errors.Unwrap(err)
 	}
 	return ""
+}
+
+func retryableHint(err error) bool {
+	for err != nil {
+		if wrapped, ok := err.(*Err); ok && wrapped.Retryable {
+			return true
+		}
+		err = errors.Unwrap(err)
+	}
+	return false
 }
 
 // --- Standard Library Wrappers ---
