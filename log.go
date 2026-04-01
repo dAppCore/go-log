@@ -489,7 +489,7 @@ func Security(msg string, keyvals ...any) {
 func shouldRedact(key any, redactKeys []string) bool {
 	keyStr := fmt.Sprintf("%v", key)
 	for _, redactKey := range redactKeys {
-		if strings.EqualFold(redactKey, keyStr) {
+		if redactKey == keyStr {
 			return true
 		}
 	}

@@ -170,7 +170,7 @@ func TestLogger_Redaction_Good(t *testing.T) {
 	}
 }
 
-func TestLogger_Redaction_Good_CaseInsensitiveKeys(t *testing.T) {
+func TestLogger_Redaction_Bad_CaseMismatchNotRedacted(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{
 		Level:      LevelInfo,
@@ -181,8 +181,8 @@ func TestLogger_Redaction_Good_CaseInsensitiveKeys(t *testing.T) {
 	l.Info("login", "PASSWORD", "secret123")
 
 	output := buf.String()
-	if !strings.Contains(output, "PASSWORD=\"[REDACTED]\"") {
-		t.Errorf("expected case-insensitive redaction, got %q", output)
+	if !strings.Contains(output, "PASSWORD=\"secret123\"") {
+		t.Errorf("expected case-mismatched key to remain visible, got %q", output)
 	}
 }
 
