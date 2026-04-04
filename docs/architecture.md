@@ -63,6 +63,9 @@ type Err struct {
     Msg  string // human-readable description
     Err  error  // underlying cause (optional)
     Code string // machine-readable code (optional, e.g. "VALIDATION_FAILED")
+    Retryable  bool          // whether the caller can retry the operation
+    RetryAfter *time.Duration // optional retry delay hint
+    NextAction string        // suggested next step when not retryable
 }
 ```
 
@@ -115,6 +118,9 @@ log(LevelInfo, "[INF]", ...)
   |     if any value implements `error`:
   |       extract Op  -> append "op"    key if not already present
   |       extract FormatStackTrace -> append "stack" key if not already present
+  |       extract recovery hints -> append "retryable",
+  |                                 "retry_after_seconds",
+  |                                 "next_action" if not already present
   +-- format key-value pairs:
   |     string values -> %q (quoted, injection-safe)
   |     other values  -> %v

@@ -2,9 +2,12 @@ package log
 
 import (
 	"bytes"
+	"errors"
 	goio "io"
+	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // nopWriteCloser wraps a writer with a no-op Close for testing rotation.
@@ -12,7 +15,7 @@ type nopWriteCloser struct{ goio.Writer }
 
 func (nopWriteCloser) Close() error { return nil }
 
-func TestLogger_Levels(t *testing.T) {
+func TestLogger_Levels_Good(t *testing.T) {
 	tests := []struct {
 		name     string
 		level    Level
@@ -62,7 +65,7 @@ func TestLogger_Levels(t *testing.T) {
 	}
 }
 
-func TestLogger_KeyValues(t *testing.T) {
+func TestLogger_KeyValues_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelDebug, Output: &buf})
 
@@ -80,7 +83,7 @@ func TestLogger_KeyValues(t *testing.T) {
 	}
 }
 
-func TestLogger_ErrorContext(t *testing.T) {
+func TestLogger_ErrorContext_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Output: &buf, Level: LevelInfo})
 
@@ -98,7 +101,54 @@ func TestLogger_ErrorContext(t *testing.T) {
 	}
 }
 
-func TestLogger_Redaction(t *testing.T) {
+func TestLogger_ErrorContextIncludesRecovery_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Output: &buf, Level: LevelInfo})
+	retryAfter := 45 * time.Second
+
+	err := EWithRecovery("retryable.Op", "temporary failure", errors.New("temporary failure"), true, &retryAfter, "retry with backoff")
+	l.Error("request failed", "err", err)
+
+	output := buf.String()
+	if !strings.Contains(output, "retryable=true") {
+		t.Errorf("expected output to contain retryable=true, got %q", output)
+	}
+	if !strings.Contains(output, "retry_after_seconds=45") {
+		t.Errorf("expected output to contain retry_after_seconds=45, got %q", output)
+	}
+	if !strings.Contains(output, "next_action=\"retry with backoff\"") {
+		t.Errorf("expected output to contain next_action=\"retry with backoff\", got %q", output)
+	}
+}
+
+func TestLogger_ErrorContextIncludesNestedRecovery_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Output: &buf, Level: LevelInfo})
+	retryAfter := 30 * time.Second
+
+	inner := &Err{
+		Msg:        "inner failure",
+		Retryable:  true,
+		RetryAfter: &retryAfter,
+		NextAction: "retry later",
+	}
+	outer := &Err{Msg: "outer failure", Err: inner}
+
+	l.Error("request failed", "err", outer)
+
+	output := buf.String()
+	if !strings.Contains(output, "retryable=true") {
+		t.Errorf("expected output to contain retryable=true, got %q", output)
+	}
+	if !strings.Contains(output, "retry_after_seconds=30") {
+		t.Errorf("expected output to contain retry_after_seconds=30, got %q", output)
+	}
+	if !strings.Contains(output, "next_action=\"retry later\"") {
+		t.Errorf("expected output to contain next_action=\"retry later\", got %q", output)
+	}
+}
+
+func TestLogger_Redaction_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{
 		Level:      LevelInfo,
@@ -120,7 +170,23 @@ func TestLogger_Redaction(t *testing.T) {
 	}
 }
 
-func TestLogger_InjectionPrevention(t *testing.T) {
+func TestLogger_Redaction_Bad_CaseMismatchNotRedacted(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{
+		Level:      LevelInfo,
+		Output:     &buf,
+		RedactKeys: []string{"password"},
+	})
+
+	l.Info("login", "PASSWORD", "secret123")
+
+	output := buf.String()
+	if !strings.Contains(output, "PASSWORD=\"secret123\"") {
+		t.Errorf("expected case-mismatched key to remain visible, got %q", output)
+	}
+}
+
+func TestLogger_InjectionPrevention_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelInfo, Output: &buf})
 
@@ -137,7 +203,44 @@ func TestLogger_InjectionPrevention(t *testing.T) {
 	}
 }
 
-func TestLogger_SetLevel(t *testing.T) {
+func TestLogger_KeySanitization_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	l.Info("message", "key\nwith newline", "value\nwith newline")
+	output := buf.String()
+
+	if !strings.Contains(output, "key\\nwith newline") {
+		t.Errorf("expected sanitized key, got %q", output)
+	}
+	if !strings.Contains(output, "value\\nwith newline") {
+		t.Errorf("expected sanitized value, got %q", output)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line, got %d", len(lines))
+	}
+}
+
+func TestLogger_MessageSanitization_Good(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	l.Info("message\nwith\tcontrol\rchars")
+	output := buf.String()
+
+	if !strings.Contains(output, "message\\nwith\\tcontrol\\rchars") {
+		t.Errorf("expected control characters to be escaped, got %q", output)
+	}
+
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) != 1 {
+		t.Errorf("expected 1 line, got %d", len(lines))
+	}
+}
+
+func TestLogger_SetLevel_Good(t *testing.T) {
 	l := New(Options{Level: LevelInfo})
 
 	if l.Level() != LevelInfo {
@@ -148,9 +251,14 @@ func TestLogger_SetLevel(t *testing.T) {
 	if l.Level() != LevelDebug {
 		t.Error("expected level to be Debug after SetLevel")
 	}
+
+	l.SetLevel(99)
+	if l.Level() != LevelInfo {
+		t.Errorf("expected invalid level to default back to info, got %v", l.Level())
+	}
 }
 
-func TestLevel_String(t *testing.T) {
+func TestLevel_String_Good(t *testing.T) {
 	tests := []struct {
 		level    Level
 		expected string
@@ -172,7 +280,7 @@ func TestLevel_String(t *testing.T) {
 	}
 }
 
-func TestLogger_Security(t *testing.T) {
+func TestLogger_Security_Good(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelError, Output: &buf})
 
@@ -203,6 +311,17 @@ func TestLogger_SetOutput_Good(t *testing.T) {
 	l.Info("second")
 	if buf2.Len() == 0 {
 		t.Error("expected output in second buffer after SetOutput")
+	}
+}
+
+func TestLogger_SetOutput_Bad_NilFallsBackToStderr(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelInfo, Output: &buf})
+
+	l.SetOutput(nil)
+
+	if l.output != os.Stderr {
+		t.Errorf("expected nil output to fallback to os.Stderr, got %T", l.output)
 	}
 }
 
@@ -291,11 +410,44 @@ func TestNew_RotationFactory_Good(t *testing.T) {
 	}
 }
 
+func TestNew_RotationFactory_Good_DefaultRetentionValues(t *testing.T) {
+	original := RotationWriterFactory
+	defer func() { RotationWriterFactory = original }()
+
+	var captured RotationOptions
+	RotationWriterFactory = func(opts RotationOptions) goio.WriteCloser {
+		captured = opts
+		return nopWriteCloser{goio.Discard}
+	}
+
+	_ = New(Options{
+		Level:    LevelInfo,
+		Rotation: &RotationOptions{Filename: "test.log"},
+	})
+
+	if captured.MaxSize != defaultRotationMaxSize {
+		t.Errorf("expected default MaxSize=%d, got %d", defaultRotationMaxSize, captured.MaxSize)
+	}
+	if captured.MaxAge != defaultRotationMaxAge {
+		t.Errorf("expected default MaxAge=%d, got %d", defaultRotationMaxAge, captured.MaxAge)
+	}
+	if captured.MaxBackups != defaultRotationMaxBackups {
+		t.Errorf("expected default MaxBackups=%d, got %d", defaultRotationMaxBackups, captured.MaxBackups)
+	}
+}
+
 func TestNew_DefaultOutput_Good(t *testing.T) {
 	// No output or rotation — should default to stderr (not nil)
 	l := New(Options{Level: LevelInfo})
 	if l.output == nil {
 		t.Error("expected non-nil output when no Output specified")
+	}
+}
+
+func TestNew_Bad_InvalidLevelDefaultsToInfo(t *testing.T) {
+	l := New(Options{Level: Level(99)})
+	if l.Level() != LevelInfo {
+		t.Errorf("expected invalid level to default to info, got %v", l.Level())
 	}
 }
 
@@ -329,6 +481,50 @@ func TestDefault_Good(t *testing.T) {
 	Warn("warn msg")
 	Error("error msg")
 	Security("sec msg")
+
+	output := buf.String()
+	for _, tag := range []string{"[DBG]", "[INF]", "[WRN]", "[ERR]", "[SEC]"} {
+		if !strings.Contains(output, tag) {
+			t.Errorf("expected %s in output, got %q", tag, output)
+		}
+	}
+}
+
+func TestDefault_Bad_SetDefaultNilIgnored(t *testing.T) {
+	original := Default()
+	var buf bytes.Buffer
+	custom := New(Options{Level: LevelInfo, Output: &buf})
+	SetDefault(custom)
+	defer SetDefault(original)
+
+	SetDefault(nil)
+
+	if Default() != custom {
+		t.Error("expected SetDefault(nil) to preserve the current default logger")
+	}
+}
+
+func TestLogger_StyleHooks_Bad_NilHooksDoNotPanic(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(Options{Level: LevelDebug, Output: &buf})
+	l.StyleTimestamp = nil
+	l.StyleDebug = nil
+	l.StyleInfo = nil
+	l.StyleWarn = nil
+	l.StyleError = nil
+	l.StyleSecurity = nil
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("expected nil style hooks not to panic, got panic: %v", r)
+		}
+	}()
+
+	l.Debug("debug")
+	l.Info("info")
+	l.Warn("warn")
+	l.Error("error")
+	l.Security("security")
 
 	output := buf.String()
 	for _, tag := range []string{"[DBG]", "[INF]", "[WRN]", "[ERR]", "[SEC]"} {
