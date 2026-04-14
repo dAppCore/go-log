@@ -66,9 +66,10 @@ func (l Level) String() string {
 
 // Logger provides structured logging.
 type Logger struct {
-	mu     sync.RWMutex
-	level  Level
-	output goio.Writer
+	mu      sync.RWMutex
+	writeMu sync.Mutex
+	level   Level
+	output  goio.Writer
 
 	// RedactKeys is a list of keys whose values should be masked in logs.
 	redactKeys []string
@@ -317,6 +318,8 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 		}
 	}
 
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
 	_, _ = fmt.Fprintf(output, "%s %s %s%s\n", timestamp, prefix, normaliseLogText(msg), kvStr)
 }
 

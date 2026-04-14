@@ -12,6 +12,14 @@ import (
 	"time"
 )
 
+type singleUnwrapper interface {
+	Unwrap() error
+}
+
+type multiUnwrapper interface {
+	Unwrap() []error
+}
+
 // Err represents a structured error with operational context.
 // It implements the error interface and supports unwrapping.
 type Err struct {
@@ -193,70 +201,87 @@ func inheritRecovery(dst *Err, err error) {
 	if err == nil || dst == nil {
 		return
 	}
-	var source *Err
-	if As(err, &source) {
+	walkErrorTree(err, func(current error) bool {
+		source, ok := current.(*Err)
+		if !ok {
+			return true
+		}
+		if !source.hasRecovery() {
+			return true
+		}
 		dst.Retryable = source.Retryable
 		dst.RetryAfter = source.RetryAfter
 		dst.NextAction = source.NextAction
-	}
+		return false
+	})
 }
 
 // inheritedCode returns the first non-empty code found in an error chain.
 func inheritedCode(err error) string {
-	for err != nil {
-		if wrapped, ok := err.(*Err); ok && wrapped.Code != "" {
-			return wrapped.Code
+	var code string
+	walkErrorTree(err, func(current error) bool {
+		wrapped, ok := current.(*Err)
+		if !ok || wrapped.Code == "" {
+			return true
 		}
-		err = errors.Unwrap(err)
-	}
-	return ""
+		code = wrapped.Code
+		return false
+	})
+	return code
 }
 
 // RetryAfter returns the first retry-after hint from an error chain, if present.
 //
 //	retryAfter, ok := log.RetryAfter(err)
 func RetryAfter(err error) (*time.Duration, bool) {
-	for err != nil {
-		if wrapped, ok := err.(*Err); ok && wrapped.RetryAfter != nil {
-			return wrapped.RetryAfter, true
+	var retryAfter *time.Duration
+	var ok bool
+	walkErrorTree(err, func(current error) bool {
+		wrapped, match := current.(*Err)
+		if !match || wrapped.RetryAfter == nil {
+			return true
 		}
-		err = errors.Unwrap(err)
-	}
-	return nil, false
+		retryAfter = wrapped.RetryAfter
+		ok = true
+		return false
+	})
+	return retryAfter, ok
 }
 
 // IsRetryable reports whether the error chain contains a retryable Err.
 //
 //	if log.IsRetryable(err) { /* retry the operation */ }
 func IsRetryable(err error) bool {
-	var wrapped *Err
-	if As(err, &wrapped) {
-		return wrapped.Retryable
-	}
-	return false
+	var retryable bool
+	walkErrorTree(err, func(current error) bool {
+		wrapped, ok := current.(*Err)
+		if !ok || !wrapped.Retryable {
+			return true
+		}
+		retryable = true
+		return false
+	})
+	return retryable
 }
 
 // RecoveryAction returns the first next action from an error chain.
 //
 //	next := log.RecoveryAction(err)
 func RecoveryAction(err error) string {
-	for err != nil {
-		if wrapped, ok := err.(*Err); ok && wrapped.NextAction != "" {
-			return wrapped.NextAction
+	var nextAction string
+	walkErrorTree(err, func(current error) bool {
+		wrapped, ok := current.(*Err)
+		if !ok || wrapped.NextAction == "" {
+			return true
 		}
-		err = errors.Unwrap(err)
-	}
-	return ""
+		nextAction = wrapped.NextAction
+		return false
+	})
+	return nextAction
 }
 
 func retryableHint(err error) bool {
-	for err != nil {
-		if wrapped, ok := err.(*Err); ok && wrapped.Retryable {
-			return true
-		}
-		err = errors.Unwrap(err)
-	}
-	return false
+	return IsRetryable(err)
 }
 
 // --- Standard Library Wrappers ---
@@ -301,11 +326,16 @@ func Join(errs ...error) error {
 //
 //	op := log.Op(err) // e.g. "user.Save"
 func Op(err error) string {
-	var e *Err
-	if As(err, &e) {
-		return e.Op
-	}
-	return ""
+	var op string
+	walkErrorTree(err, func(current error) bool {
+		wrapped, ok := current.(*Err)
+		if !ok || wrapped.Op == "" {
+			return true
+		}
+		op = wrapped.Op
+		return false
+	})
+	return op
 }
 
 // ErrCode extracts the error code from an error.
@@ -313,11 +343,7 @@ func Op(err error) string {
 //
 //	code := log.ErrCode(err) // e.g. "VALIDATION_FAILED"
 func ErrCode(err error) string {
-	var e *Err
-	if As(err, &e) {
-		return e.Code
-	}
-	return ""
+	return inheritedCode(err)
 }
 
 // Message extracts the message from an error.
@@ -328,9 +354,17 @@ func Message(err error) string {
 	if err == nil {
 		return ""
 	}
-	var e *Err
-	if As(err, &e) {
-		return e.Msg
+	var msg string
+	walkErrorTree(err, func(current error) bool {
+		wrapped, ok := current.(*Err)
+		if !ok || wrapped.Msg == "" {
+			return true
+		}
+		msg = wrapped.Msg
+		return false
+	})
+	if msg != "" {
+		return msg
 	}
 	return err.Error()
 }
@@ -343,12 +377,21 @@ func Root(err error) error {
 	if err == nil {
 		return nil
 	}
-	for {
-		unwrapped := errors.Unwrap(err)
+	switch current := any(err).(type) {
+	case multiUnwrapper:
+		children := current.Unwrap()
+		if len(children) == 0 {
+			return err
+		}
+		return Root(children[0])
+	case singleUnwrapper:
+		unwrapped := current.Unwrap()
 		if unwrapped == nil {
 			return err
 		}
-		err = unwrapped
+		return Root(unwrapped)
+	default:
+		return err
 	}
 }
 
@@ -358,16 +401,12 @@ func Root(err error) error {
 //	for op := range log.AllOps(err) { /* "api.Call" → "db.Query" → ... */ }
 func AllOps(err error) iter.Seq[string] {
 	return func(yield func(string) bool) {
-		for err != nil {
-			if e, ok := err.(*Err); ok {
-				if e.Op != "" {
-					if !yield(e.Op) {
-						return
-					}
-				}
+		walkErrorTree(err, func(current error) bool {
+			if e, ok := current.(*Err); ok && e.Op != "" {
+				return yield(e.Op)
 			}
-			err = errors.Unwrap(err)
-		}
+			return true
+		})
 	}
 }
 
@@ -421,6 +460,27 @@ func LogError(err error, op, msg string) error {
 	wrapped := Wrap(err, op, msg)
 	Default().Error(msg, "op", op, "err", err)
 	return wrapped
+}
+
+func walkErrorTree(err error, visit func(error) bool) {
+	if err == nil {
+		return
+	}
+	if !visit(err) {
+		return
+	}
+	switch current := any(err).(type) {
+	case multiUnwrapper:
+		for _, child := range current.Unwrap() {
+			walkErrorTree(child, visit)
+		}
+	case singleUnwrapper:
+		walkErrorTree(current.Unwrap(), visit)
+	}
+}
+
+func (e *Err) hasRecovery() bool {
+	return e != nil && (e.Retryable || e.RetryAfter != nil || e.NextAction != "")
 }
 
 // LogWarn logs at Warn level and returns a wrapped error.
