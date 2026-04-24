@@ -2,9 +2,12 @@ package log
 
 import (
 	"bytes"
+	// Note: intrinsic - errors.New/Is/As/Unwrap exercise stdlib error chain behavior; core.E is downstream.
 	"errors"
+	// Note: intrinsic - fmt.Errorf builds wrapped test errors; core is downstream of go-log so cannot self-depend.
 	"fmt"
 	"slices"
+	// Note: intrinsic - strings.* assertions inspect rendered errors/logs; core.* helpers are downstream of go-log.
 	"strings"
 	"testing"
 	"time"

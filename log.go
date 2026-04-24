@@ -6,12 +6,17 @@
 package log
 
 import (
+	// Note: intrinsic - fmt.Sprintf/Fprintf used for log message formatting; core is downstream of go-log so cannot self-depend.
 	"fmt"
 	goio "io"
+	// Note: intrinsic - os.Stdout/Stderr/File for terminal log output; core.Medium is downstream.
 	"os"
+	// Note: intrinsic - os/user.Current() for log filename personalisation; no core equivalent.
 	"os/user"
 	"slices"
+	// Note: intrinsic - strings.* primitives; core.* helpers are downstream of go-log.
 	"strings"
+	// Note: intrinsic - sync.Mutex/RWMutex for concurrent log write coordination; core.Lock is downstream.
 	"sync"
 	"time"
 )

@@ -6,8 +6,10 @@
 package log
 
 import (
+	// Note: intrinsic - errors.New/Is/As/Join for stdlib error chains; core.E is downstream.
 	"errors"
 	"iter"
+	// Note: intrinsic - strings.* primitives; core.* helpers are downstream of go-log.
 	"strings"
 	"time"
 )

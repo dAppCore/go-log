@@ -2,9 +2,12 @@ package log
 
 import (
 	"bytes"
+	// Note: intrinsic - errors.New supplies test error chains; core.E is the unit under test.
 	"errors"
 	goio "io"
+	// Note: intrinsic - os.Stderr verifies logger default terminal output; core.Medium is downstream.
 	"os"
+	// Note: intrinsic - strings.* assertions inspect rendered log text; core.* helpers are downstream of go-log.
 	"strings"
 	"testing"
 	"time"
