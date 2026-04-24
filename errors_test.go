@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/stretchr/testify/assert"
 )
 
 // --- Err Type Tests ---
@@ -16,55 +15,81 @@ import (
 func TestErr_Error_Good(t *testing.T) {
 	// With underlying error
 	err := &Err{Op: "db.Query", Msg: "failed to query", Err: errors.New("connection refused")}
-	assert.Equal(t, "db.Query: failed to query: connection refused", err.Error())
+	if want, got := "db.Query: failed to query: connection refused", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	// With code
 	err = &Err{Op: "api.Call", Msg: "request failed", Code: "TIMEOUT"}
-	assert.Equal(t, "api.Call: request failed [TIMEOUT]", err.Error())
+	if want, got := "api.Call: request failed [TIMEOUT]", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	// With both underlying error and code
 	err = &Err{Op: "user.Save", Msg: "save failed", Err: errors.New("duplicate key"), Code: "DUPLICATE"}
-	assert.Equal(t, "user.Save: save failed [DUPLICATE]: duplicate key", err.Error())
+	if want, got := "user.Save: save failed [DUPLICATE]: duplicate key", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	// Just op and msg
 	err = &Err{Op: "cache.Get", Msg: "miss"}
-	assert.Equal(t, "cache.Get: miss", err.Error())
+	if want, got := "cache.Get: miss", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestErr_Error_EmptyOp_Good(t *testing.T) {
 	// No Op - should not have leading colon
 	err := &Err{Msg: "just a message"}
-	assert.Equal(t, "just a message", err.Error())
+	if want, got := "just a message", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	// No Op with code
 	err = &Err{Msg: "error with code", Code: "ERR_CODE"}
-	assert.Equal(t, "error with code [ERR_CODE]", err.Error())
+	if want, got := "error with code [ERR_CODE]", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	// No Op with underlying error
 	err = &Err{Msg: "wrapped", Err: errors.New("underlying")}
-	assert.Equal(t, "wrapped: underlying", err.Error())
+	if want, got := "wrapped: underlying", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestErr_Error_EmptyMsg_Good(t *testing.T) {
 	err := &Err{Op: "api.Call", Code: "TIMEOUT"}
-	assert.Equal(t, "api.Call: [TIMEOUT]", err.Error())
+	if want, got := "api.Call: [TIMEOUT]", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	err = &Err{Op: "api.Call", Err: errors.New("underlying")}
-	assert.Equal(t, "api.Call: underlying", err.Error())
+	if want, got := "api.Call: underlying", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	err = &Err{Op: "api.Call", Code: "TIMEOUT", Err: errors.New("underlying")}
-	assert.Equal(t, "api.Call: [TIMEOUT]: underlying", err.Error())
+	if want, got := "api.Call: [TIMEOUT]: underlying", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	err = &Err{Op: "api.Call"}
-	assert.Equal(t, "api.Call", err.Error())
+	if want, got := "api.Call", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestErr_Unwrap_Good(t *testing.T) {
 	underlying := errors.New("underlying error")
 	err := &Err{Op: "test", Msg: "wrapped", Err: underlying}
 
-	assert.Equal(t, underlying, errors.Unwrap(err))
-	assert.True(t, errors.Is(err, underlying))
+	if want, got := underlying, errors.Unwrap(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if !errors.Is(err, underlying) {
+		t.Fatal("expected true")
+	}
 }
 
 // --- Error Creation Function Tests ---
@@ -73,19 +98,33 @@ func TestE_Good(t *testing.T) {
 	underlying := errors.New("base error")
 	err := E("op.Name", "something failed", underlying)
 
-	assert.NotNil(t, err)
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
 	var logErr *Err
-	assert.True(t, errors.As(err, &logErr))
-	assert.Equal(t, "op.Name", logErr.Op)
-	assert.Equal(t, "something failed", logErr.Msg)
-	assert.Equal(t, underlying, logErr.Err)
+	if !errors.As(err, &logErr) {
+		t.Fatal("expected true")
+	}
+	if want, got := "op.Name", logErr.Op; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "something failed", logErr.Msg; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := underlying, logErr.Err; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestE_Good_NilError(t *testing.T) {
 	// E creates an error even with nil underlying - useful for errors without causes
 	err := E("op.Name", "message", nil)
-	assert.NotNil(t, err)
-	assert.Equal(t, "op.Name: message", err.Error())
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := "op.Name: message", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestEWithRecovery_Good(t *testing.T) {
@@ -93,23 +132,42 @@ func TestEWithRecovery_Good(t *testing.T) {
 	err := EWithRecovery("op.Name", "message", nil, true, &retryAfter, "retry once")
 
 	var logErr *Err
-	assert.NotNil(t, err)
-	assert.True(t, As(err, &logErr))
-	assert.True(t, logErr.Retryable)
-	if assert.NotNil(t, logErr.RetryAfter) {
-		assert.Equal(t, retryAfter, *logErr.RetryAfter)
+	if err == nil {
+		t.Fatal("expected non-nil")
 	}
-	assert.Equal(t, "retry once", logErr.NextAction)
+	if !As(err, &logErr) {
+		t.Fatal("expected true")
+	}
+	if !logErr.Retryable {
+		t.Fatal("expected true")
+	}
+	if logErr.RetryAfter == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := retryAfter, *logErr.RetryAfter; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "retry once", logErr.NextAction; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestWrap_Good(t *testing.T) {
 	underlying := errors.New("base")
 	err := Wrap(underlying, "handler.Process", "processing failed")
 
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "handler.Process")
-	assert.Contains(t, err.Error(), "processing failed")
-	assert.True(t, errors.Is(err, underlying))
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !strings.Contains(err.Error(), "handler.Process") {
+		t.Fatalf("expected %q to contain %q", err.Error(), "handler.Process")
+	}
+	if !strings.Contains(err.Error(), "processing failed") {
+		t.Fatalf("expected %q to contain %q", err.Error(), "processing failed")
+	}
+	if !errors.Is(err, underlying) {
+		t.Fatal("expected true")
+	}
 }
 
 func TestWrap_PreservesCode_Good(t *testing.T) {
@@ -119,9 +177,15 @@ func TestWrap_PreservesCode_Good(t *testing.T) {
 	// Wrap it - should preserve the code
 	outer := Wrap(inner, "outer.Op", "outer context")
 
-	assert.NotNil(t, outer)
-	assert.Equal(t, "VALIDATION_ERROR", ErrCode(outer))
-	assert.Contains(t, outer.Error(), "[VALIDATION_ERROR]")
+	if outer == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := "VALIDATION_ERROR", ErrCode(outer); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if !strings.Contains(outer.Error(), "[VALIDATION_ERROR]") {
+		t.Fatalf("expected %q to contain %q", outer.Error(), "[VALIDATION_ERROR]")
+	}
 }
 
 func TestWrap_PreservesCode_FromNestedErrWithEmptyOuterCode_Good(t *testing.T) {
@@ -130,9 +194,15 @@ func TestWrap_PreservesCode_FromNestedErrWithEmptyOuterCode_Good(t *testing.T) {
 
 	outer := Wrap(mid, "outer.Op", "outer context")
 
-	assert.NotNil(t, outer)
-	assert.Equal(t, "VALIDATION_ERROR", ErrCode(outer))
-	assert.Contains(t, outer.Error(), "[VALIDATION_ERROR]")
+	if outer == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := "VALIDATION_ERROR", ErrCode(outer); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if !strings.Contains(outer.Error(), "[VALIDATION_ERROR]") {
+		t.Fatalf("expected %q to contain %q", outer.Error(), "[VALIDATION_ERROR]")
+	}
 }
 
 func TestWrap_PreservesRecovery_Good(t *testing.T) {
@@ -141,39 +211,66 @@ func TestWrap_PreservesRecovery_Good(t *testing.T) {
 
 	outer := Wrap(inner, "outer.Op", "outer context")
 
-	assert.NotNil(t, outer)
-	var logErr *Err
-	assert.True(t, As(outer, &logErr))
-	assert.True(t, logErr.Retryable)
-	if assert.NotNil(t, logErr.RetryAfter) {
-		assert.Equal(t, retryAfter, *logErr.RetryAfter)
+	if outer == nil {
+		t.Fatal("expected non-nil")
 	}
-	assert.Equal(t, "inspect input", logErr.NextAction)
+	var logErr *Err
+	if !As(outer, &logErr) {
+		t.Fatal("expected true")
+	}
+	if !logErr.Retryable {
+		t.Fatal("expected true")
+	}
+	if logErr.RetryAfter == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := retryAfter, *logErr.RetryAfter; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "inspect input", logErr.NextAction; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestWrap_PreservesCode_FromNestedChain_Good(t *testing.T) {
 	root := WrapCode(errors.New("base"), "CHAIN_ERROR", "inner", "inner failed")
 	wrapped := Wrap(fmt.Errorf("mid layer: %w", root), "outer", "outer context")
 
-	assert.Equal(t, "CHAIN_ERROR", ErrCode(wrapped))
-	assert.Contains(t, wrapped.Error(), "[CHAIN_ERROR]")
+	if want, got := "CHAIN_ERROR", ErrCode(wrapped); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if !strings.Contains(wrapped.Error(), "[CHAIN_ERROR]") {
+		t.Fatalf("expected %q to contain %q", wrapped.Error(), "[CHAIN_ERROR]")
+	}
 }
 
 func TestWrap_NilError_Good(t *testing.T) {
 	err := Wrap(nil, "op", "msg")
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
 }
 
 func TestWrapCode_Good(t *testing.T) {
 	underlying := errors.New("validation failed")
 	err := WrapCode(underlying, "INVALID_INPUT", "api.Validate", "bad request")
 
-	assert.NotNil(t, err)
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
 	var logErr *Err
-	assert.True(t, errors.As(err, &logErr))
-	assert.Equal(t, "INVALID_INPUT", logErr.Code)
-	assert.Equal(t, "api.Validate", logErr.Op)
-	assert.Contains(t, err.Error(), "[INVALID_INPUT]")
+	if !errors.As(err, &logErr) {
+		t.Fatal("expected true")
+	}
+	if want, got := "INVALID_INPUT", logErr.Code; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "api.Validate", logErr.Op; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if !strings.Contains(err.Error(), "[INVALID_INPUT]") {
+		t.Fatalf("expected %q to contain %q", err.Error(), "[INVALID_INPUT]")
+	}
 }
 
 func TestWrapCode_Good_EmptyCodeDoesNotInherit(t *testing.T) {
@@ -182,8 +279,12 @@ func TestWrapCode_Good_EmptyCodeDoesNotInherit(t *testing.T) {
 	outer := WrapCode(inner, "", "outer.Op", "outer failed")
 
 	var logErr *Err
-	assert.True(t, As(outer, &logErr))
-	assert.Equal(t, "", logErr.Code)
+	if !As(outer, &logErr) {
+		t.Fatal("expected true")
+	}
+	if want, got := "", logErr.Code; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestWrapCodeWithRecovery_Good(t *testing.T) {
@@ -191,13 +292,27 @@ func TestWrapCodeWithRecovery_Good(t *testing.T) {
 	err := WrapCodeWithRecovery(errors.New("validation failed"), "INVALID_INPUT", "api.Validate", "bad request", true, &retryAfter, "retry with backoff")
 
 	var logErr *Err
-	assert.NotNil(t, err)
-	assert.True(t, As(err, &logErr))
-	assert.True(t, logErr.Retryable)
-	assert.NotNil(t, logErr.RetryAfter)
-	assert.Equal(t, retryAfter, *logErr.RetryAfter)
-	assert.Equal(t, "retry with backoff", logErr.NextAction)
-	assert.Equal(t, "INVALID_INPUT", logErr.Code)
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !As(err, &logErr) {
+		t.Fatal("expected true")
+	}
+	if !logErr.Retryable {
+		t.Fatal("expected true")
+	}
+	if logErr.RetryAfter == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := retryAfter, *logErr.RetryAfter; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "retry with backoff", logErr.NextAction; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "INVALID_INPUT", logErr.Code; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestWrapCodeWithRecovery_Good_EmptyCodeDoesNotInherit(t *testing.T) {
@@ -207,29 +322,47 @@ func TestWrapCodeWithRecovery_Good_EmptyCodeDoesNotInherit(t *testing.T) {
 	outer := WrapCodeWithRecovery(inner, "", "outer.Op", "outer failed", true, &retryAfter, "retry later")
 
 	var logErr *Err
-	assert.True(t, As(outer, &logErr))
-	assert.Equal(t, "", logErr.Code)
+	if !As(outer, &logErr) {
+		t.Fatal("expected true")
+	}
+	if want, got := "", logErr.Code; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestWrapCode_Good_NilError(t *testing.T) {
 	// WrapCode with nil error but with code still creates an error
 	err := WrapCode(nil, "CODE", "op", "msg")
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "[CODE]")
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !strings.Contains(err.Error(), "[CODE]") {
+		t.Fatalf("expected %q to contain %q", err.Error(), "[CODE]")
+	}
 
 	// Only returns nil when both error and code are empty
 	err = WrapCode(nil, "", "op", "msg")
-	assert.Nil(t, err)
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
 }
 
 func TestNewCode_Good(t *testing.T) {
 	err := NewCode("NOT_FOUND", "resource not found")
 
 	var logErr *Err
-	assert.True(t, errors.As(err, &logErr))
-	assert.Equal(t, "NOT_FOUND", logErr.Code)
-	assert.Equal(t, "resource not found", logErr.Msg)
-	assert.Nil(t, logErr.Err)
+	if !errors.As(err, &logErr) {
+		t.Fatal("expected true")
+	}
+	if want, got := "NOT_FOUND", logErr.Code; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "resource not found", logErr.Msg; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if logErr.Err != nil {
+		t.Fatalf("expected nil, got %v", logErr.Err)
+	}
 }
 
 func TestNewCodeWithRecovery_Good(t *testing.T) {
@@ -237,12 +370,24 @@ func TestNewCodeWithRecovery_Good(t *testing.T) {
 	err := NewCodeWithRecovery("NOT_FOUND", "resource not found", false, &retryAfter, "contact support")
 
 	var logErr *Err
-	assert.NotNil(t, err)
-	assert.True(t, As(err, &logErr))
-	assert.False(t, logErr.Retryable)
-	assert.NotNil(t, logErr.RetryAfter)
-	assert.Equal(t, retryAfter, *logErr.RetryAfter)
-	assert.Equal(t, "contact support", logErr.NextAction)
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !As(err, &logErr) {
+		t.Fatal("expected true")
+	}
+	if logErr.Retryable {
+		t.Fatal("expected false")
+	}
+	if logErr.RetryAfter == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := retryAfter, *logErr.RetryAfter; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
+	if want, got := "contact support", logErr.NextAction; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 // --- Standard Library Wrapper Tests ---
@@ -251,22 +396,34 @@ func TestIs_Good(t *testing.T) {
 	sentinel := errors.New("sentinel")
 	wrapped := Wrap(sentinel, "test", "wrapped")
 
-	assert.True(t, Is(wrapped, sentinel))
-	assert.False(t, Is(wrapped, errors.New("other")))
+	if !Is(wrapped, sentinel) {
+		t.Fatal("expected true")
+	}
+	if Is(wrapped, errors.New("other")) {
+		t.Fatal("expected false")
+	}
 }
 
 func TestAs_Good(t *testing.T) {
 	err := E("test.Op", "message", errors.New("base"))
 
 	var logErr *Err
-	assert.True(t, As(err, &logErr))
-	assert.Equal(t, "test.Op", logErr.Op)
+	if !As(err, &logErr) {
+		t.Fatal("expected true")
+	}
+	if want, got := "test.Op", logErr.Op; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestNewError_Good(t *testing.T) {
 	err := NewError("simple error")
-	assert.NotNil(t, err)
-	assert.Equal(t, "simple error", err.Error())
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if want, got := "simple error", err.Error(); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestJoin_Good(t *testing.T) {
@@ -274,39 +431,55 @@ func TestJoin_Good(t *testing.T) {
 	err2 := errors.New("error 2")
 	joined := Join(err1, err2)
 
-	assert.True(t, errors.Is(joined, err1))
-	assert.True(t, errors.Is(joined, err2))
+	if !errors.Is(joined, err1) {
+		t.Fatal("expected true")
+	}
+	if !errors.Is(joined, err2) {
+		t.Fatal("expected true")
+	}
 }
 
 // --- Helper Function Tests ---
 
 func TestOp_Good(t *testing.T) {
 	err := E("mypackage.MyFunc", "failed", errors.New("cause"))
-	assert.Equal(t, "mypackage.MyFunc", Op(err))
+	if want, got := "mypackage.MyFunc", Op(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestOp_Good_NotLogError(t *testing.T) {
 	err := errors.New("plain error")
-	assert.Equal(t, "", Op(err))
+	if want, got := "", Op(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestErrCode_Good(t *testing.T) {
 	err := WrapCode(errors.New("base"), "ERR_CODE", "op", "msg")
-	assert.Equal(t, "ERR_CODE", ErrCode(err))
+	if want, got := "ERR_CODE", ErrCode(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestErrCode_Good_NoCode(t *testing.T) {
 	err := E("op", "msg", errors.New("base"))
-	assert.Equal(t, "", ErrCode(err))
+	if want, got := "", ErrCode(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestErrCode_Good_PlainError(t *testing.T) {
 	err := errors.New("plain error")
-	assert.Equal(t, "", ErrCode(err))
+	if want, got := "", ErrCode(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestErrCode_Good_Nil(t *testing.T) {
-	assert.Equal(t, "", ErrCode(nil))
+	if want, got := "", ErrCode(nil); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestRetryAfter_Good(t *testing.T) {
@@ -314,8 +487,12 @@ func TestRetryAfter_Good(t *testing.T) {
 	err := &Err{Msg: "typed", RetryAfter: &retryAfter}
 
 	got, ok := RetryAfter(err)
-	assert.True(t, ok)
-	assert.Equal(t, retryAfter, *got)
+	if !ok {
+		t.Fatal("expected true")
+	}
+	if want, got := retryAfter, *got; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestRetryAfter_Good_NestedChain(t *testing.T) {
@@ -324,39 +501,55 @@ func TestRetryAfter_Good_NestedChain(t *testing.T) {
 	outer := &Err{Msg: "outer", Err: inner}
 
 	got, ok := RetryAfter(outer)
-	assert.True(t, ok)
-	assert.Equal(t, retryAfter, *got)
+	if !ok {
+		t.Fatal("expected true")
+	}
+	if want, got := retryAfter, *got; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestIsRetryable_Good(t *testing.T) {
 	err := &Err{Msg: "typed", Retryable: true}
-	assert.True(t, IsRetryable(err))
+	if !IsRetryable(err) {
+		t.Fatal("expected true")
+	}
 }
 
 func TestRecoveryAction_Good(t *testing.T) {
 	err := &Err{Msg: "typed", NextAction: "inspect"}
-	assert.Equal(t, "inspect", RecoveryAction(err))
+	if want, got := "inspect", RecoveryAction(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestRecoveryAction_Good_NestedChain(t *testing.T) {
 	inner := &Err{Msg: "typed", NextAction: "inspect"}
 	outer := &Err{Msg: "outer", Err: inner}
 
-	assert.Equal(t, "inspect", RecoveryAction(outer))
+	if want, got := "inspect", RecoveryAction(outer); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestMessage_Good(t *testing.T) {
 	err := E("op", "the message", errors.New("base"))
-	assert.Equal(t, "the message", Message(err))
+	if want, got := "the message", Message(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestMessage_Good_PlainError(t *testing.T) {
 	err := errors.New("plain message")
-	assert.Equal(t, "plain message", Message(err))
+	if want, got := "plain message", Message(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestMessage_Good_Nil(t *testing.T) {
-	assert.Equal(t, "", Message(nil))
+	if want, got := "", Message(nil); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestRoot_Good(t *testing.T) {
@@ -364,16 +557,22 @@ func TestRoot_Good(t *testing.T) {
 	level1 := Wrap(root, "level1", "wrapped once")
 	level2 := Wrap(level1, "level2", "wrapped twice")
 
-	assert.Equal(t, root, Root(level2))
+	if want, got := root, Root(level2); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestRoot_Good_SingleError(t *testing.T) {
 	err := errors.New("single")
-	assert.Equal(t, err, Root(err))
+	if want, got := err, Root(err); want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestRoot_Good_Nil(t *testing.T) {
-	assert.Nil(t, Root(nil))
+	if got := Root(nil); got != nil {
+		t.Fatalf("expected nil, got %v", got)
+	}
 }
 
 // --- Log-and-Return Helper Tests ---
@@ -389,16 +588,30 @@ func TestLogError_Good(t *testing.T) {
 	err := LogError(underlying, "db.Connect", "database unavailable")
 
 	// Check returned error
-	assert.NotNil(t, err)
-	assert.Contains(t, err.Error(), "db.Connect")
-	assert.Contains(t, err.Error(), "database unavailable")
-	assert.True(t, errors.Is(err, underlying))
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !strings.Contains(err.Error(), "db.Connect") {
+		t.Fatalf("expected %q to contain %q", err.Error(), "db.Connect")
+	}
+	if !strings.Contains(err.Error(), "database unavailable") {
+		t.Fatalf("expected %q to contain %q", err.Error(), "database unavailable")
+	}
+	if !errors.Is(err, underlying) {
+		t.Fatal("expected true")
+	}
 
 	// Check log output
 	output := buf.String()
-	assert.Contains(t, output, "[ERR]")
-	assert.Contains(t, output, "database unavailable")
-	assert.Contains(t, output, "op=\"db.Connect\"")
+	if !strings.Contains(output, "[ERR]") {
+		t.Fatalf("expected %q to contain %q", output, "[ERR]")
+	}
+	if !strings.Contains(output, "database unavailable") {
+		t.Fatalf("expected %q to contain %q", output, "database unavailable")
+	}
+	if !strings.Contains(output, "op=\"db.Connect\"") {
+		t.Fatalf("expected %q to contain %q", output, "op=\"db.Connect\"")
+	}
 }
 
 func TestLogError_Good_LogsOriginalErrorContext(t *testing.T) {
@@ -410,12 +623,20 @@ func TestLogError_Good_LogsOriginalErrorContext(t *testing.T) {
 	underlying := E("db.Query", "query failed", errors.New("timeout"))
 	err := LogError(underlying, "db.Connect", "database unavailable")
 
-	assert.NotNil(t, err)
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
 
 	output := buf.String()
-	assert.Contains(t, output, "op=\"db.Connect\"")
-	assert.Contains(t, output, "stack=\"db.Query\"")
-	assert.NotContains(t, output, "stack=\"db.Connect -> db.Query\"")
+	if !strings.Contains(output, "op=\"db.Connect\"") {
+		t.Fatalf("expected %q to contain %q", output, "op=\"db.Connect\"")
+	}
+	if !strings.Contains(output, "stack=\"db.Query\"") {
+		t.Fatalf("expected %q to contain %q", output, "stack=\"db.Query\"")
+	}
+	if strings.Contains(output, "stack=\"db.Connect -> db.Query\"") {
+		t.Fatalf("expected %q not to contain %q", output, "stack=\"db.Connect -> db.Query\"")
+	}
 }
 
 func TestLogError_Good_NilError(t *testing.T) {
@@ -425,8 +646,12 @@ func TestLogError_Good_NilError(t *testing.T) {
 	defer SetDefault(New(Options{Level: LevelInfo}))
 
 	err := LogError(nil, "op", "msg")
-	assert.Nil(t, err)
-	assert.Empty(t, buf.String()) // No log output for nil error
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	if got := buf.String(); got != "" {
+		t.Fatalf("expected empty, got %v", got)
+	}
 }
 
 func TestLogWarn_Good(t *testing.T) {
@@ -438,12 +663,20 @@ func TestLogWarn_Good(t *testing.T) {
 	underlying := errors.New("cache miss")
 	err := LogWarn(underlying, "cache.Get", "falling back to db")
 
-	assert.NotNil(t, err)
-	assert.True(t, errors.Is(err, underlying))
+	if err == nil {
+		t.Fatal("expected non-nil")
+	}
+	if !errors.Is(err, underlying) {
+		t.Fatal("expected true")
+	}
 
 	output := buf.String()
-	assert.Contains(t, output, "[WRN]")
-	assert.Contains(t, output, "falling back to db")
+	if !strings.Contains(output, "[WRN]") {
+		t.Fatalf("expected %q to contain %q", output, "[WRN]")
+	}
+	if !strings.Contains(output, "falling back to db") {
+		t.Fatalf("expected %q to contain %q", output, "falling back to db")
+	}
 }
 
 func TestLogWarn_Good_NilError(t *testing.T) {
@@ -453,15 +686,24 @@ func TestLogWarn_Good_NilError(t *testing.T) {
 	defer SetDefault(New(Options{Level: LevelInfo}))
 
 	err := LogWarn(nil, "op", "msg")
-	assert.Nil(t, err)
-	assert.Empty(t, buf.String())
+	if err != nil {
+		t.Fatalf("expected nil, got %v", err)
+	}
+	if got := buf.String(); got != "" {
+		t.Fatalf("expected empty, got %v", got)
+	}
 }
 
 func TestMust_Good_NoError(t *testing.T) {
 	// Should not panic when error is nil
-	assert.NotPanics(t, func() {
+	func() {
+		defer func() {
+			if got := recover(); got != nil {
+				t.Fatalf("unexpected panic: %v", got)
+			}
+		}()
 		Must(nil, "test", "should not panic")
-	})
+	}()
 }
 
 func TestMust_Ugly_Panics(t *testing.T) {
@@ -470,13 +712,24 @@ func TestMust_Ugly_Panics(t *testing.T) {
 	SetDefault(logger)
 	defer SetDefault(New(Options{Level: LevelInfo}))
 
-	assert.Panics(t, func() {
+	didPanic := false
+	func() {
+		defer func() {
+			if recover() != nil {
+				didPanic = true
+			}
+		}()
 		Must(errors.New("fatal error"), "startup", "initialization failed")
-	})
+	}()
+	if !didPanic {
+		t.Fatal("expected panic")
+	}
 
 	// Verify error was logged before panic
 	output := buf.String()
-	assert.True(t, strings.Contains(output, "[ERR]") || len(output) > 0)
+	if !(strings.Contains(output, "[ERR]") || len(output) > 0) {
+		t.Fatal("expected true")
+	}
 }
 
 func TestStackTrace_Good(t *testing.T) {
@@ -486,28 +739,44 @@ func TestStackTrace_Good(t *testing.T) {
 	err = Wrap(err, "op3", "msg3")
 
 	stack := StackTrace(err)
-	assert.Equal(t, []string{"op3", "op2", "op1"}, stack)
+	if want, got := []string{"op3", "op2", "op1"}, stack; !slices.Equal(want, got) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 
 	// Format
 	formatted := FormatStackTrace(err)
-	assert.Equal(t, "op3 -> op2 -> op1", formatted)
+	if want, got := "op3 -> op2 -> op1", formatted; want != got {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
 
 func TestStackTrace_Bad_PlainError(t *testing.T) {
 	err := errors.New("plain error")
-	assert.Empty(t, StackTrace(err))
-	assert.Empty(t, FormatStackTrace(err))
+	if got := StackTrace(err); len(got) != 0 {
+		t.Fatalf("expected empty, got %v", got)
+	}
+	if got := FormatStackTrace(err); got != "" {
+		t.Fatalf("expected empty, got %v", got)
+	}
 }
 
 func TestStackTrace_Bad_Nil(t *testing.T) {
-	assert.Empty(t, StackTrace(nil))
-	assert.Empty(t, FormatStackTrace(nil))
+	if got := StackTrace(nil); len(got) != 0 {
+		t.Fatalf("expected empty, got %v", got)
+	}
+	if got := FormatStackTrace(nil); got != "" {
+		t.Fatalf("expected empty, got %v", got)
+	}
 }
 
 func TestStackTrace_Bad_NoOp(t *testing.T) {
 	err := &Err{Msg: "no op"}
-	assert.Empty(t, StackTrace(err))
-	assert.Empty(t, FormatStackTrace(err))
+	if got := StackTrace(err); len(got) != 0 {
+		t.Fatalf("expected empty, got %v", got)
+	}
+	if got := FormatStackTrace(err); got != "" {
+		t.Fatalf("expected empty, got %v", got)
+	}
 }
 
 func TestStackTrace_Mixed_Good(t *testing.T) {
@@ -516,5 +785,7 @@ func TestStackTrace_Mixed_Good(t *testing.T) {
 	err = Wrap(err, "outer", "msg")
 
 	stack := StackTrace(err)
-	assert.Equal(t, []string{"outer", "inner"}, stack)
+	if want, got := []string{"outer", "inner"}, stack; !slices.Equal(want, got) {
+		t.Fatalf("want %v, got %v", want, got)
+	}
 }
