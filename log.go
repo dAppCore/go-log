@@ -6,13 +6,16 @@
 package log
 
 import (
-	goio "io" // Note: intrinsic — Reader/Writer for terminal log output; core.Medium is downstream.
-	"log/slog" // Note: intrinsic — slog.AnyValue for %v-style rendering without fmt.
-	"os" // Note: intrinsic — os.Stdout/Stderr/File for terminal log output; core.Medium is downstream.
-	"os/user" // Note: intrinsic — os/user.Current() for log filename personalisation; no core equivalent.
+	// AX-6 circular-dependency exception: dappco.re/go/core imports go-log to
+	// expose core logging and error primitives, so go-log cannot import core
+	// wrappers such as core.Mutex, core.RWMutex, core.Sprintf, or core.Process.
+	// These stdlib imports are limited to structural logging behaviour.
+	goio "io"
+	"log/slog"
+	"os"
 	"slices"
-	"strconv" // Note: intrinsic — strconv.Quote replaces fmt %q; core helpers downstream.
-	"sync" // Note: intrinsic — sync.Mutex/RWMutex for concurrent log write coordination; core.Lock is downstream.
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -385,15 +388,12 @@ func (l *Logger) Security(msg string, keyvals ...any) {
 	}
 }
 
-// Username returns the current system username.
-// It uses os/user for reliability and falls back to environment variables.
+// Username returns the current system username from the process environment.
+// It avoids account database lookups because username discovery is not part of
+// structured logging.
 //
 //	user := log.Username()
 func Username() string {
-	if u, err := user.Current(); err == nil {
-		return u.Username
-	}
-	// Fallback for environments where user lookup might fail
 	if u := os.Getenv("USER"); u != "" {
 		return u
 	}

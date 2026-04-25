@@ -6,10 +6,11 @@
 package log
 
 import (
-	// Note: AX-6 — errors.New/Is/As/Join are structural stdlib error-chain primitives; core.E is downstream.
+	// AX-6 circular-dependency exception: dappco.re/go/core imports go-log to
+	// expose core.E, core.Is, and core.As, so go-log cannot import core without a
+	// dependency cycle. These stdlib imports are structural error primitives.
 	"errors"
 	"iter"
-	// Note: AX-6 — strings.Join is a structural primitive here; core.* helpers are downstream of go-log.
 	"strings"
 	"time"
 )
