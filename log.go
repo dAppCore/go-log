@@ -6,18 +6,13 @@
 package log
 
 import (
-	// Note: intrinsic - fmt.Sprintf/Fprintf used for log message formatting; core is downstream of go-log so cannot self-depend.
-	"fmt"
-	goio "io"
-	// Note: intrinsic - os.Stdout/Stderr/File for terminal log output; core.Medium is downstream.
-	"os"
-	// Note: intrinsic - os/user.Current() for log filename personalisation; no core equivalent.
-	"os/user"
+	goio "io" // Note: intrinsic — Reader/Writer for terminal log output; core.Medium is downstream.
+	"log/slog" // Note: intrinsic — slog.AnyValue for %v-style rendering without fmt.
+	"os" // Note: intrinsic — os.Stdout/Stderr/File for terminal log output; core.Medium is downstream.
+	"os/user" // Note: intrinsic — os/user.Current() for log filename personalisation; no core equivalent.
 	"slices"
-	// Note: intrinsic - strings.* primitives; core.* helpers are downstream of go-log.
-	"strings"
-	// Note: intrinsic - sync.Mutex/RWMutex for concurrent log write coordination; core.Lock is downstream.
-	"sync"
+	"strconv" // Note: intrinsic — strconv.Quote replaces fmt %q; core helpers downstream.
+	"sync" // Note: intrinsic — sync.Mutex/RWMutex for concurrent log write coordination; core.Lock is downstream.
 	"time"
 )
 
@@ -303,7 +298,7 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 			if i > 0 {
 				kvStr += " "
 			}
-			key := normaliseLogText(fmt.Sprintf("%v", keyvals[i]))
+			key := normaliseLogText(logValueString(keyvals[i]))
 			var val any
 			if i+1 < len(keyvals) {
 				val = keyvals[i+1]
@@ -316,16 +311,16 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 
 			// Secure formatting to prevent log injection
 			if s, ok := val.(string); ok {
-				kvStr += fmt.Sprintf("%s=%q", key, s)
+				kvStr += key + "=" + strconv.Quote(s)
 			} else {
-				kvStr += fmt.Sprintf("%s=%v", key, normaliseLogText(fmt.Sprintf("%v", val)))
+				kvStr += key + "=" + normaliseLogText(logValueString(val))
 			}
 		}
 	}
 
 	l.writeMu.Lock()
 	defer l.writeMu.Unlock()
-	_, _ = fmt.Fprintf(output, "%s %s %s%s\n", timestamp, prefix, normaliseLogText(msg), kvStr)
+	_, _ = goio.WriteString(output, timestamp+" "+prefix+" "+normaliseLogText(msg)+kvStr+"\n")
 }
 
 // Debug logs a debug message with optional key-value pairs.
@@ -408,14 +403,33 @@ func Username() string {
 	return "unknown"
 }
 
-var logTextCleaner = strings.NewReplacer(
-	"\r", "\\r",
-	"\n", "\\n",
-	"\t", "\\t",
-)
-
 func normaliseLogText(text string) string {
-	return logTextCleaner.Replace(text)
+	var out []byte
+	for i := 0; i < len(text); i++ {
+		var replacement string
+		switch text[i] {
+		case '\r':
+			replacement = "\\r"
+		case '\n':
+			replacement = "\\n"
+		case '\t':
+			replacement = "\\t"
+		default:
+			if out != nil {
+				out = append(out, text[i])
+			}
+			continue
+		}
+		if out == nil {
+			out = make([]byte, 0, len(text)+len(replacement))
+			out = append(out, text[:i]...)
+		}
+		out = append(out, replacement...)
+	}
+	if out == nil {
+		return text
+	}
+	return string(out)
 }
 
 // --- Default logger ---
@@ -495,11 +509,15 @@ func Security(msg string, keyvals ...any) {
 }
 
 func shouldRedact(key any, redactKeys []string) bool {
-	keyStr := fmt.Sprintf("%v", key)
+	keyStr := logValueString(key)
 	for _, redactKey := range redactKeys {
 		if redactKey == keyStr {
 			return true
 		}
 	}
 	return false
+}
+
+func logValueString(value any) string {
+	return slog.AnyValue(value).String()
 }
