@@ -1,13 +1,10 @@
 package log
 
 import (
+	// Note: test-only stdlib (no core equivalent for io.Writer capture).
 	"bytes"
-	// Note: intrinsic - errors.New supplies test error chains; core.E is the unit under test.
-	"errors"
 	goio "io"
-	// Note: intrinsic - os.Stderr verifies logger default terminal output; core.Medium is downstream.
-	"os"
-	// Note: intrinsic - strings.* assertions inspect rendered log text; core.* helpers are downstream of go-log.
+	// Note: test-only stdlib (no core equivalent for rendered output assertions).
 	"strings"
 	"testing"
 	"time"
@@ -109,7 +106,7 @@ func TestLogger_ErrorContextIncludesRecovery_Good(t *testing.T) {
 	l := New(Options{Output: &buf, Level: LevelInfo})
 	retryAfter := 45 * time.Second
 
-	err := EWithRecovery("retryable.Op", "temporary failure", errors.New("temporary failure"), true, &retryAfter, "retry with backoff")
+	err := EWithRecovery("retryable.Op", "temporary failure", NewError("temporary failure"), true, &retryAfter, "retry with backoff")
 	l.Error("request failed", "err", err)
 
 	output := buf.String()
@@ -317,14 +314,17 @@ func TestLogger_SetOutput_Good(t *testing.T) {
 	}
 }
 
-func TestLogger_SetOutput_Bad_NilFallsBackToStderr(t *testing.T) {
+func TestLogger_SetOutput_Bad_NilUsesFallback(t *testing.T) {
 	var buf bytes.Buffer
 	l := New(Options{Level: LevelInfo, Output: &buf})
 
 	l.SetOutput(nil)
 
-	if l.output != os.Stderr {
-		t.Errorf("expected nil output to fallback to os.Stderr, got %T", l.output)
+	if l.output == nil {
+		t.Error("expected nil output to install a fallback writer")
+	}
+	if l.output == &buf {
+		t.Error("expected nil output to replace the previous writer")
 	}
 }
 
