@@ -6,10 +6,10 @@
 package log
 
 import (
-	// Note: intrinsic - errors.New/Is/As/Join for stdlib error chains; core.E is downstream.
+	// Note: AX-6 — errors.New/Is/As/Join are structural stdlib error-chain primitives; core.E is downstream.
 	"errors"
 	"iter"
-	// Note: intrinsic - strings.* primitives; core.* helpers are downstream of go-log.
+	// Note: AX-6 — strings.Join is a structural primitive here; core.* helpers are downstream of go-log.
 	"strings"
 	"time"
 )
