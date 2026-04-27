@@ -1,0 +1,25 @@
+version: "3"
+
+tasks:
+  default:
+    deps: [test]
+
+  test:
+    desc: Validate the go-log AX-10 CLI artifact driver.
+    dir: ../../..
+    cmds:
+      - |
+        export GOCACHE="${GOCACHE:-/tmp/go-log-gocache}"
+        export GOMODCACHE="${GOMODCACHE:-/tmp/go-log-gomodcache}"
+        export GOWORK=off
+        mkdir -p "$GOCACHE" "$GOMODCACHE"
+        bin="$(mktemp -t core-log.XXXXXX)"
+        trap 'rm -f "$bin"' EXIT
+        go build -o "$bin" ./tests/cli/log
+        "$bin"
+
+  driver:
+    desc: Run the go-log AX-10 driver directly.
+    dir: ../../..
+    cmds:
+      - go run ./tests/cli/log

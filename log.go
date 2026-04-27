@@ -6,12 +6,15 @@
 package log
 
 import (
-	"fmt"
+	// AX-6 circular-dependency exception: dappco.re/go/core imports go-log to
+	// expose core logging and error primitives, so go-log cannot import core
+	// wrappers such as core.Mutex, core.RWMutex, core.Sprintf, or core.Process.
+	// These stdlib imports are limited to structural logging behaviour.
 	goio "io"
+	"log/slog"
 	"os"
-	"os/user"
 	"slices"
-	"strings"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -66,9 +69,10 @@ func (l Level) String() string {
 
 // Logger provides structured logging.
 type Logger struct {
-	mu     sync.RWMutex
-	level  Level
-	output goio.Writer
+	mu      sync.RWMutex
+	writeMu sync.Mutex
+	level   Level
+	output  goio.Writer
 
 	// RedactKeys is a list of keys whose values should be masked in logs.
 	redactKeys []string
@@ -297,7 +301,7 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 			if i > 0 {
 				kvStr += " "
 			}
-			key := normaliseLogText(fmt.Sprintf("%v", keyvals[i]))
+			key := normaliseLogText(logValueString(keyvals[i]))
 			var val any
 			if i+1 < len(keyvals) {
 				val = keyvals[i+1]
@@ -310,14 +314,16 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 
 			// Secure formatting to prevent log injection
 			if s, ok := val.(string); ok {
-				kvStr += fmt.Sprintf("%s=%q", key, s)
+				kvStr += key + "=" + strconv.Quote(s)
 			} else {
-				kvStr += fmt.Sprintf("%s=%v", key, normaliseLogText(fmt.Sprintf("%v", val)))
+				kvStr += key + "=" + normaliseLogText(logValueString(val))
 			}
 		}
 	}
 
-	_, _ = fmt.Fprintf(output, "%s %s %s%s\n", timestamp, prefix, normaliseLogText(msg), kvStr)
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+	_, _ = goio.WriteString(output, timestamp+" "+prefix+" "+normaliseLogText(msg)+kvStr+"\n")
 }
 
 // Debug logs a debug message with optional key-value pairs.
@@ -382,15 +388,12 @@ func (l *Logger) Security(msg string, keyvals ...any) {
 	}
 }
 
-// Username returns the current system username.
-// It uses os/user for reliability and falls back to environment variables.
+// Username returns the current system username from the process environment.
+// It avoids account database lookups because username discovery is not part of
+// structured logging.
 //
 //	user := log.Username()
 func Username() string {
-	if u, err := user.Current(); err == nil {
-		return u.Username
-	}
-	// Fallback for environments where user lookup might fail
 	if u := os.Getenv("USER"); u != "" {
 		return u
 	}
@@ -400,14 +403,33 @@ func Username() string {
 	return "unknown"
 }
 
-var logTextCleaner = strings.NewReplacer(
-	"\r", "\\r",
-	"\n", "\\n",
-	"\t", "\\t",
-)
-
 func normaliseLogText(text string) string {
-	return logTextCleaner.Replace(text)
+	var out []byte
+	for i := 0; i < len(text); i++ {
+		var replacement string
+		switch text[i] {
+		case '\r':
+			replacement = "\\r"
+		case '\n':
+			replacement = "\\n"
+		case '\t':
+			replacement = "\\t"
+		default:
+			if out != nil {
+				out = append(out, text[i])
+			}
+			continue
+		}
+		if out == nil {
+			out = make([]byte, 0, len(text)+len(replacement))
+			out = append(out, text[:i]...)
+		}
+		out = append(out, replacement...)
+	}
+	if out == nil {
+		return text
+	}
+	return string(out)
 }
 
 // --- Default logger ---
@@ -487,11 +509,15 @@ func Security(msg string, keyvals ...any) {
 }
 
 func shouldRedact(key any, redactKeys []string) bool {
-	keyStr := fmt.Sprintf("%v", key)
+	keyStr := logValueString(key)
 	for _, redactKey := range redactKeys {
 		if redactKey == keyStr {
 			return true
 		}
 	}
 	return false
+}
+
+func logValueString(value any) string {
+	return slog.AnyValue(value).String()
 }

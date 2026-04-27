@@ -237,7 +237,7 @@ Collects `AllOps(err)` into a slice in outermost-to-innermost order. When no ope
 ### Username
 `func Username() string`
 
-Returns the current username by trying `user.Current()` first, then the `USER` environment variable, then the `USERNAME` environment variable.
+Returns the current username by trying the `USER` environment variable first, then the `USERNAME` environment variable. It does not perform account database lookups.
 
 ### Warn
 `func Warn(msg string, keyvals ...any)`
