@@ -1,22 +1,18 @@
-// Package log provides structured logging and error handling for Core applications.
+// Package golog provides structured logging and error handling for Core applications.
 //
-//	log.SetLevel(log.LevelDebug)
-//	log.Info("server started", "port", 8080)
-//	log.Error("failed to connect", "err", err)
-package log
+//	golog.SetLevel(golog.LevelDebug)
+//	golog.Info("server started", "port", 8080)
+//	golog.Error("failed to connect", "err", err)
+package golog
 
 import (
-	// AX-6 circular-dependency exception: dappco.re/go/core imports go-log to
-	// expose core logging and error primitives, so go-log cannot import core
-	// wrappers such as core.Mutex, core.RWMutex, core.Sprintf, or core.Process.
-	// These stdlib imports are limited to structural logging behaviour.
-	goio "io"
 	"log/slog"
-	"os"
 	"slices"
 	"strconv"
 	"sync"
 	"time"
+
+	core "dappco.re/go"
 )
 
 // Level defines logging verbosity.
@@ -72,7 +68,7 @@ type Logger struct {
 	mu      sync.RWMutex
 	writeMu sync.Mutex
 	level   Level
-	output  goio.Writer
+	output  core.Writer
 
 	// RedactKeys is a list of keys whose values should be masked in logs.
 	redactKeys []string
@@ -120,7 +116,7 @@ type Options struct {
 	Level Level
 	// Output is the destination for log messages. If Rotation is provided,
 	// Output is ignored and logs are written to the rotating file instead.
-	Output goio.Writer
+	Output core.Writer
 	// Rotation enables log rotation to file. If provided, Filename must be set.
 	Rotation *RotationOptions
 	// RedactKeys is a list of keys whose values should be masked in logs.
@@ -129,13 +125,13 @@ type Options struct {
 
 // RotationWriterFactory creates a rotating writer from options.
 // Set this to enable log rotation (provided by core/go-io integration).
-var RotationWriterFactory func(RotationOptions) goio.WriteCloser
+var RotationWriterFactory func(RotationOptions) core.WriteCloser
 
 // New creates a new Logger with the given options.
 //
-//	logger := log.New(log.Options{
-//	    Level:      log.LevelInfo,
-//	    Output:     os.Stdout,
+//	logger := golog.New(golog.Options{
+//	    Level:      golog.LevelInfo,
+//	    Output:     core.Stdout(),
 //	    RedactKeys: []string{"password", "token"},
 //	})
 func New(opts Options) *Logger {
@@ -146,7 +142,7 @@ func New(opts Options) *Logger {
 		output = RotationWriterFactory(normaliseRotationOptions(*opts.Rotation))
 	}
 	if output == nil {
-		output = os.Stderr
+		output = core.Stderr()
 	}
 
 	return &Logger{
@@ -186,7 +182,7 @@ func safeStyle(style func(string) string) func(string) string {
 
 // SetLevel changes the log level.
 //
-//	logger.SetLevel(log.LevelDebug)
+//	logger.SetLevel(golog.LevelDebug)
 func (l *Logger) SetLevel(level Level) {
 	l.mu.Lock()
 	l.level = normaliseLevel(level)
@@ -204,10 +200,10 @@ func (l *Logger) Level() Level {
 
 // SetOutput changes the output writer.
 //
-//	logger.SetOutput(os.Stdout)
-func (l *Logger) SetOutput(w goio.Writer) {
+//	logger.SetOutput(core.Stdout())
+func (l *Logger) SetOutput(w core.Writer) {
 	if w == nil {
-		w = os.Stderr
+		w = core.Stderr()
 	}
 	l.mu.Lock()
 	l.output = w
@@ -229,8 +225,7 @@ func (l *Logger) shouldLog(level Level) bool {
 	return level <= l.level
 }
 
-func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
-	_ = level
+func (l *Logger) log(_ Level, prefix, msg string, keyvals ...any) {
 	l.mu.RLock()
 	output := l.output
 	styleTimestamp := l.StyleTimestamp
@@ -323,12 +318,14 @@ func (l *Logger) log(level Level, prefix, msg string, keyvals ...any) {
 
 	l.writeMu.Lock()
 	defer l.writeMu.Unlock()
-	_, _ = goio.WriteString(output, timestamp+" "+prefix+" "+normaliseLogText(msg)+kvStr+"\n")
+	if r := core.WriteString(output, timestamp+" "+prefix+" "+normaliseLogText(msg)+kvStr+"\n"); !r.OK {
+		return
+	}
 }
 
 // Debug logs a debug message with optional key-value pairs.
 //
-//	logger.Debug("processing request", "method", "GET", "path", "/api/users")
+//	logger.Debug("processing request", "method", "GET", "route", "/api/users")
 func (l *Logger) Debug(msg string, keyvals ...any) {
 	if l.shouldLog(LevelDebug) {
 		l.mu.RLock()
@@ -394,10 +391,10 @@ func (l *Logger) Security(msg string, keyvals ...any) {
 //
 //	user := log.Username()
 func Username() string {
-	if u := os.Getenv("USER"); u != "" {
+	if u := core.Getenv("USER"); u != "" {
 		return u
 	}
-	if u := os.Getenv("USERNAME"); u != "" {
+	if u := core.Getenv("USERNAME"); u != "" {
 		return u
 	}
 	return "unknown"
