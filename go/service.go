@@ -54,6 +54,16 @@ func NewService(opts Options) func(*core.Core) core.Result {
 	}
 }
 
+// Register builds the log service with default Options and returns
+// the service Result directly — the imperative-style alternative to
+// NewService for consumers wiring services without WithName options.
+//
+//	r := golog.Register(c)
+//	svc := r.Value.(*golog.Service)
+func Register(c *core.Core) core.Result {
+	return NewService(Options{})(c)
+}
+
 // OnStartup registers the log action handlers on the attached Core.
 // Implements core.Startable. Idempotent via core.Once.
 //
