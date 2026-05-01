@@ -229,16 +229,13 @@ func verifyDefaultLoggerAndRotationHooks() core.Result {
 }
 
 func requireError(r core.Result, label string) core.Result {
-	if !r.OK {
-		return r
-	}
 	if r.Value == nil {
 		return core.Fail(core.Errorf("%s value is nil", label))
 	}
 	if _, ok := r.Value.(error); !ok {
 		return core.Fail(core.Errorf("%s value is %T", label, r.Value))
 	}
-	return r
+	return core.Ok(r.Value)
 }
 
 func containsAll(output string, wants []string) core.Result {

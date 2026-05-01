@@ -74,7 +74,7 @@ func (e *Err) Unwrap() (
 
 // E creates a new Err with operation context.
 func E(op, msg string, err error) core.Result {
-	return core.Ok(&Err{Op: op, Msg: msg, Err: err})
+	return core.Fail(&Err{Op: op, Msg: msg, Err: err})
 }
 
 // EWithRecovery creates a new Err with operation context and recovery metadata.
@@ -88,7 +88,7 @@ func EWithRecovery(op, msg string, err error, retryable bool, retryAfter *time.D
 	recoveryErr.Retryable = retryable
 	recoveryErr.RetryAfter = retryAfter
 	recoveryErr.NextAction = nextAction
-	return core.Ok(recoveryErr)
+	return core.Fail(recoveryErr)
 }
 
 // Wrap wraps an error with operation context.
@@ -98,7 +98,7 @@ func Wrap(err error, op, msg string) core.Result {
 	}
 	wrapped := &Err{Op: op, Msg: msg, Err: err, Code: inheritedCode(err)}
 	inheritRecovery(wrapped, err)
-	return core.Ok(wrapped)
+	return core.Fail(wrapped)
 }
 
 // WrapWithRecovery wraps an error with operation context and explicit recovery metadata.
@@ -116,7 +116,7 @@ func WrapWithRecovery(err error, op, msg string, retryable bool, retryAfter *tim
 	recoveryErr.Retryable = retryable
 	recoveryErr.RetryAfter = retryAfter
 	recoveryErr.NextAction = nextAction
-	return core.Ok(recoveryErr)
+	return core.Fail(recoveryErr)
 }
 
 // WrapCode wraps an error with operation context and error code.
@@ -126,7 +126,7 @@ func WrapCode(err error, code, op, msg string) core.Result {
 	}
 	wrapped := &Err{Op: op, Msg: msg, Err: err, Code: code}
 	inheritRecovery(wrapped, err)
-	return core.Ok(wrapped)
+	return core.Fail(wrapped)
 }
 
 // WrapCodeWithRecovery wraps an error with operation context, code, and recovery metadata.
@@ -144,17 +144,17 @@ func WrapCodeWithRecovery(err error, code, op, msg string, retryable bool, retry
 	recoveryErr.Retryable = retryable
 	recoveryErr.RetryAfter = retryAfter
 	recoveryErr.NextAction = nextAction
-	return core.Ok(recoveryErr)
+	return core.Fail(recoveryErr)
 }
 
 // NewCode creates an error with just code and message.
 func NewCode(code, msg string) core.Result {
-	return core.Ok(&Err{Msg: msg, Code: code})
+	return core.Fail(&Err{Msg: msg, Code: code})
 }
 
 // NewCodeWithRecovery creates a coded error with recovery metadata.
 func NewCodeWithRecovery(code, msg string, retryable bool, retryAfter *time.Duration, nextAction string) core.Result {
-	return core.Ok(&Err{
+	return core.Fail(&Err{
 		Msg:        msg,
 		Code:       code,
 		Retryable:  retryable,
@@ -258,12 +258,18 @@ func As(err error, target any) bool {
 
 // NewError creates a simple error with the given text.
 func NewError(text string) core.Result {
-	return core.Ok(&Err{Msg: text})
+	return core.Fail(&Err{Msg: text})
 }
 
 // Join combines multiple errors into one.
+// Returns Ok(nil) when every input is nil (nothing to join), Fail(joined)
+// otherwise.
 func Join(errs ...error) core.Result {
-	return core.Ok(core.ErrorJoin(errs...))
+	joined := core.ErrorJoin(errs...)
+	if joined == nil {
+		return core.Ok(nil)
+	}
+	return core.Fail(joined)
 }
 
 // Op extracts the operation name from an error.
