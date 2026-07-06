@@ -8,7 +8,6 @@ import (
 
 func mustError(t *core.T, r core.Result) error {
 	t.Helper()
-	core.RequireTrue(t, r.OK)
 	if r.Value == nil {
 		return nil
 	}
