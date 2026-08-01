@@ -186,10 +186,11 @@ func verifyDefaultLoggerAndRotationHooks() core.Result {
 	}
 
 	fsys := (&core.Fs{}).NewUnrestricted()
-	dir := fsys.TempDir("go-log-cli-")
-	if dir == "" {
+	dirResult := fsys.TempDir("go-log-cli-")
+	if !dirResult.OK {
 		return core.Fail(core.NewError("temporary directory unavailable"))
 	}
+	dir := dirResult.Value.(string)
 	defer func() {
 		if r := fsys.DeleteAll(dir); !r.OK {
 			core.Print(core.Stderr(), "cleanup failed: %s", r.Error())
