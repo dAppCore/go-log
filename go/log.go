@@ -402,7 +402,7 @@ func Username() string {
 
 func normaliseLogText(text string) string {
 	var out []byte
-	for i := 0; i < len(text); i++ {
+	for i := range len(text) {
 		var replacement string
 		switch text[i] {
 		case '\r':
@@ -507,12 +507,7 @@ func Security(msg string, keyvals ...any) {
 
 func shouldRedact(key any, redactKeys []string) bool {
 	keyStr := logValueString(key)
-	for _, redactKey := range redactKeys {
-		if redactKey == keyStr {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(redactKeys, keyStr)
 }
 
 func logValueString(value any) string {
