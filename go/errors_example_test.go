@@ -3,8 +3,8 @@ package golog_test
 import (
 	"time"
 
-	core "dappco.re/go"
-	golog "dappco.re/go/log"
+	core "github.com/dappcore/go"
+	golog "github.com/dappcore/go-log/go"
 )
 
 func ExampleErr_Error() {

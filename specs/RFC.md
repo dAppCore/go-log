@@ -1,5 +1,5 @@
 # log
-**Import:** `dappco.re/go/core/log`
+**Import:** `github.com/dappcore/go-log/go`
 **Files:** 2
 
 ## Types

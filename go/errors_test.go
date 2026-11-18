@@ -3,7 +3,7 @@ package golog
 import (
 	"time"
 
-	core "dappco.re/go"
+	core "github.com/dappcore/go"
 )
 
 func mustError(t *core.T, r core.Result) error {

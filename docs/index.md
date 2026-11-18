@@ -5,7 +5,7 @@ description: Structured logging and error handling for Core applications
 
 # go-log
 
-`dappco.re/go/core/log` provides structured logging and contextual error
+`github.com/dappcore/go-log/go` provides structured logging and contextual error
 handling for Go applications built on the Core framework.  It is a small,
 zero-dependency library (only `testify` at test time) that replaces ad-hoc
 `fmt.Println` / `log.Printf` calls with level-filtered, key-value structured
@@ -15,7 +15,7 @@ stack.
 ## Quick Start
 
 ```go
-import "dappco.re/go/core/log"
+import "github.com/dappcore/go-log/go"
 
 // Use the package-level default logger straight away
 log.SetLevel(log.LevelDebug)
@@ -93,7 +93,7 @@ code.
 ## Module Path
 
 ```
-dappco.re/go/core/log
+github.com/dappcore/go-log/go
 ```
 
 Requires **Go 1.26+** (uses `iter.Seq` from the standard library).
