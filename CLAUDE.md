@@ -43,4 +43,4 @@ Zero runtime dependencies. `testify` is test-only.
 - **Commit messages**: conventional commits (`feat`, `fix`, `docs`, `chore`, etc.)
 - **Dependencies**: no new runtime dependencies without justification; use `RotationWriterFactory` injection point for log rotation
 - Requires **Go 1.26+** (uses `iter.Seq`)
-- Module path: `dappco.re/go/core/log`
+- Module path: `github.com/dappcore/go-log/go`

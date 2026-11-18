@@ -8,8 +8,8 @@ package main
 import (
 	"time"
 
-	core "dappco.re/go"
-	corelog "dappco.re/go/log"
+	core "github.com/dappcore/go"
+	corelog "github.com/dappcore/go-log/go"
 )
 
 func main() {

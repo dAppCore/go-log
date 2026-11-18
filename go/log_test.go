@@ -1,6 +1,6 @@
 package golog
 
-import core "dappco.re/go"
+import core "github.com/dappcore/go"
 
 type testWriteCloser struct {
 	core.Writer

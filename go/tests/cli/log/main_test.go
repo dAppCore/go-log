@@ -1,6 +1,6 @@
 package main
 
-import core "dappco.re/go"
+import core "github.com/dappcore/go"
 
 func TestMain_run_Good(t *core.T) {
 	r := run()

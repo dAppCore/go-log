@@ -1,6 +1,6 @@
 # go-log
 
-Structured logging and error helpers for the `dappco.re/go` ecosystem.
+Structured logging and error helpers for the `github.com/dappcore/go` ecosystem.
 
 The Go module lives in `go/`. From this repository root, run the v0.9.0 audit
 with:
